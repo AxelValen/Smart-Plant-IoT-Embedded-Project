@@ -2,37 +2,64 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>ESP32 Monitor</title>
+  <title>ESP32 MQTT Monitor</title>
   <style>
     body { font-family: monospace; background: #111; color: #0f0; padding: 2rem; }
-    h1 { color: #0f0; }
-    #data { font-size: 1.4rem; margin-top: 1rem; }
-    .label { color: #888; }
-    .value { color: #0f0; font-size: 2rem; }
-    #dot { display: inline-block; width: 12px; height: 12px;
-           background: #0f0; border-radius: 50%; margin-right: 8px; }
+    h1   { color: #0f0; }
+    .value  { font-size: 3rem; color: #0f0; }
+    .label  { color: #888; font-size: 0.9rem; }
+    #status { font-size: 0.85rem; margin-bottom: 1rem; }
+    #log    { margin-top: 2rem; max-height: 200px; overflow-y: auto;
+              border-top: 1px solid #333; padding-top: 1rem; }
+    .log-entry { color: #555; font-size: 0.8rem; }
   </style>
 </head>
 <body>
-  <h1><span id="dot"></span>ESP32 Live Monitor</h1>
-  <div id="data">Esperando datos...</div>
+  <h1>ESP32 MQTT Monitor</h1>
+  <div id="status">⏳ Conectando al servidor...</div>
+
+  <p class="label">Valor</p>
+  <div class="value" id="valor">—</div>
+
+  <p class="label">Mensaje</p>
+  <div id="mensaje">—</div>
+
+  <p class="label">Último update</p>
+  <div id="timestamp">—</div>
+
+  <div id="log"><p class="label">Log de mensajes:</p></div>
+
   <script>
-    async function poll() {
+    // WebSocket: conexión persistente, el servidor empuja los datos
+    const ws = new WebSocket(`ws://${location.host}`);
+
+    ws.onopen = () => {
+      document.getElementById('status').textContent = '🟢 Conectado via WebSocket';
+    };
+
+    ws.onclose = () => {
+      document.getElementById('status').textContent = '🔴 Desconectado';
+    };
+
+    ws.onmessage = (event) => {
       try {
-        const res = await fetch('/data');
-        const d = await res.json();
-        if (d.timestamp) {
-          document.getElementById('data').innerHTML = `
-            <p><span class="label">Valor:</span><br>
-               <span class="value">${d.valor ?? '—'}</span></p>
-            <p><span class="label">Mensaje:</span> ${d.mensaje ?? '—'}</p>
-            <p><span class="label">Último update:</span> ${d.timestamp}</p>
-          `;
-        }
-      } catch(e) { /* servidor no disponible */ }
-    }
-    setInterval(poll, 1000);
-    poll();
+        const d = JSON.parse(event.data);
+
+        document.getElementById('valor').textContent     = d.valor   ?? '—';
+        document.getElementById('mensaje').textContent   = d.mensaje ?? '—';
+        document.getElementById('timestamp').textContent = new Date().toLocaleTimeString();
+
+        // Agrega al log
+        const log   = document.getElementById('log');
+        const entry = document.createElement('div');
+        entry.className   = 'log-entry';
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${event.data}`;
+        log.appendChild(entry);
+        log.scrollTop = log.scrollHeight;
+      } catch(e) {
+        console.error('Error parseando mensaje:', e);
+      }
+    };
   </script>
 </body>
 </html>
