@@ -44,6 +44,7 @@ void setup() {
 void loop() {
   // Manejo WiFi
   if (WiFi.status() == WL_CONNECTED && !wifiConnected) {
+    digitalWrite(LED_BUILTIN, 1);
     Serial.println("✅ WiFi conectado!");
     Serial.println(WiFi.localIP());
     wifiConnected = true;
