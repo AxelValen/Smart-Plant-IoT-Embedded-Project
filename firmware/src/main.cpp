@@ -4,6 +4,7 @@
 #include "soc/rtc_cntl_reg.h"
 #include "soc/soc.h"
 
+#define LED_BUILTIN 2
 #define WIFI_SSID     "Main Valen's Phone"
 #define WIFI_PASSWORD **WIFI_PASSWORD**
 #define MQTT_BROKER   "172.20.10.3"   // IP local
@@ -48,6 +49,8 @@ void loop() {
     wifiConnected = true;
   }
   if (WiFi.status() != WL_CONNECTED) {
+    Serial.println(".");
+    digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
     wifiConnected = false;
     delay(1000);
     return;
