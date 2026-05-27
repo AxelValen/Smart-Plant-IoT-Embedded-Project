@@ -34,6 +34,7 @@ void connectMQTT() {
       Serial.println(" ✅ conectado!");
 
       mqtt.subscribe(topicControl.c_str());
+      mqtt.subscribe("control/led/global");
 
       // Publica un mensaje de registro con los atributos del dispositivo
       String reg = "{\"device_id\":\"" + deviceID +
