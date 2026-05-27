@@ -38,6 +38,19 @@ const mqttOptions = {
 // --- Conexión al broker MQTT ---
 const mqttClient = mqtt.connect(brokerUrl, mqttOptions);
 
+wss.on('connection', (ws) => {
+  console.log('🖥️  Navegador conectado');
+
+  // Recibe comandos del navegador y los publica en MQTT
+  ws.on('message', (message) => {
+    const cmd = message.toString();
+    console.log('🕹️  Comando recibido del navegador:', cmd);
+    mqttClient.publish('control/led', cmd);
+  });
+
+  ws.on('close', () => console.log('🖥️  Navegador desconectado'));
+});
+
 mqttClient.on('connect', () => {
   console.log('✅ Conectado al broker Mosquitto');
   mqttClient.subscribe('sensor/data', (err) => {

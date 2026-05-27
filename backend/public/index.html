@@ -27,11 +27,36 @@
   <p class="label">Último update</p>
   <div id="timestamp">—</div>
 
+  <div style="margin-top: 2rem; border-top: 1px solid #333; padding-top: 1.5rem;">
+    <p class="label">Control actuador</p>
+    <button id="btnLed" onclick="toggleLed()"
+      style="background:#0f0; color:#111; border:none; padding: 0.8rem 2rem;
+            font-size:1.2rem; font-family:monospace; cursor:pointer; border-radius:4px;">
+      💡 Encender LED
+    </button>
+    <span id="ledStatus" style="margin-left:1rem; color:#888;">Estado: desconocido</span>
+  </div>
+
   <div id="log"><p class="label">Log de mensajes:</p></div>
 
   <script>
     // WebSocket: conexión persistente, el servidor empuja los datos
     const ws = new WebSocket(`ws://${location.host}`);
+
+    let ledOn = false;
+
+    function toggleLed() {
+      ledOn = !ledOn;
+      const cmd     = ledOn ? 'LED_ON' : 'LED_OFF';
+      const btn     = document.getElementById('btnLed');
+      const status  = document.getElementById('ledStatus');
+
+      ws.send(cmd); // envía el comando al servidor Node.js via WebSocket
+
+      btn.textContent     = ledOn ? '💡 Apagar LED' : '💡 Encender LED';
+      btn.style.background = ledOn ? '#ff0' : '#0f0';
+      status.textContent  = `Estado: ${ledOn ? 'ENCENDIDO 🟡' : 'APAGADO ⚫'}`;
+    }
 
     ws.onopen = () => {
       document.getElementById('status').textContent = '🟢 Conectado via WebSocket';
