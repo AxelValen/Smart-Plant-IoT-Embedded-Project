@@ -34,6 +34,7 @@ void connectMQTT() {
       Serial.println(" ✅ conectado!");
 
       mqtt.subscribe(topicControl.c_str());
+      mqtt.subscribe("control/led/global");
 
       // Publica un mensaje de registro con los atributos del dispositivo
       String reg = "{\"device_id\":\"" + deviceID +
@@ -59,7 +60,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.print("]: ");
   Serial.println(message);
 
-  if (String(topic) == topicControl.c_str()) {
+  if (String(topic) == topicControl.c_str() || "control/led/global") {
     if (message == "LED_ON") {
       digitalWrite(LED_BUILTIN, HIGH);
       Serial.println("💡 LED encendido");
