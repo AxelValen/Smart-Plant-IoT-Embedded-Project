@@ -60,7 +60,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.print("]: ");
   Serial.println(message);
 
-  if (String(topic) == topicControl.c_str()) {
+  if (String(topic) == topicControl.c_str() || "control/led/global") {
     if (message == "LED_ON") {
       digitalWrite(LED_BUILTIN, HIGH);
       Serial.println("💡 LED encendido");
