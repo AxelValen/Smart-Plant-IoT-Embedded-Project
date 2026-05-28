@@ -10,10 +10,14 @@
 #define WIFI_PASSWORD **WIFI_PASSWORD**
 #define MQTT_BROKER   **MQTT_BROKER_URL**
 #define MQTT_PORT     **MQTT_PORT**
-#define MQTT_TOPIC    "sensor/data"
-#define MQTT_TOPIC_CONTROL "control/led"
 #define MQTT_USERNAME **MQTT_USERNAME**
 #define MQTT_PASSWORD **MQTT_PASSWORD**  
+
+#define PLANT_TYPE    "tomate"
+String deviceID;
+String topicData;
+String topicControl;
+String topicRegister = "device/register";
 
 WiFiClientSecure wifiClient;
 PubSubClient mqtt(wifiClient);
@@ -26,9 +30,18 @@ void connectMQTT() {
   while (!mqtt.connected()) {
     Serial.print("Conectando al broker MQTT...");
     // client ID único para este dispositivo
-    if (mqtt.connect("ESP32Client", MQTT_USERNAME, MQTT_PASSWORD)) {
+    if (mqtt.connect((deviceID+"-"+PLANT_TYPE).c_str(), MQTT_USERNAME, MQTT_PASSWORD)) {
       Serial.println(" ✅ conectado!");
-      mqtt.subscribe(MQTT_TOPIC_CONTROL);
+
+      mqtt.subscribe(topicControl.c_str());
+      mqtt.subscribe("control/led/global");
+
+      // Publica un mensaje de registro con los atributos del dispositivo
+      String reg = "{\"device_id\":\"" + deviceID +
+               "\",\"plant_type\":\"" + String(PLANT_TYPE) +
+               "\",\"status\":\"online\"}";
+
+      mqtt.publish(topicRegister.c_str(), reg.c_str());
     } else {
       Serial.print(" ❌ falló, rc=");
       Serial.print(mqtt.state());
@@ -47,7 +60,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   Serial.print("]: ");
   Serial.println(message);
 
-  if (String(topic) == MQTT_TOPIC_CONTROL) {
+  if (String(topic) == topicControl.c_str() || String(topic) == "control/led/global") {
     if (message == "LED_ON") {
       digitalWrite(LED_BUILTIN, HIGH);
       Serial.println("💡 LED encendido");
@@ -61,27 +74,37 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 void setup() {
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
   Serial.begin(921600);
+  pinMode(LED_BUILTIN, OUTPUT);
+  
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Conectando a WiFi");
+  
+  // Esperamos a que conecte ANTES de pedir la MAC
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\n✅ WiFi conectado!");
+  
+  // Ahora el WiFi está encendido y la MAC es válida
+  deviceID = WiFi.macAddress();
+  topicData    = "sensor/data/" + deviceID;
+  topicControl = "control/led/" + deviceID;
+  
   wifiClient.setInsecure();
   mqtt.setServer(MQTT_BROKER, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
-  Serial.println("Iniciando...");
+  Serial.println("Iniciando MQTT...");
 }
 
 void loop() {
   // Manejo WiFi
-  if (WiFi.status() == WL_CONNECTED && !wifiConnected) {
-    //digitalWrite(LED_BUILTIN, HIGH);
-    Serial.println("✅ WiFi conectado!");
-    Serial.println(WiFi.localIP());
-    wifiConnected = true;
-  }
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println(".");
-    //digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
     wifiConnected = false;
     delay(1000);
     return;
+  } else {
+    wifiConnected = false;
   }
 
   // Manejo MQTT
@@ -91,14 +114,15 @@ void loop() {
   // Publica cada 2 segundos
   if (millis() - lastPublish >= 2000) {
     lastPublish = millis();
-    int data = random(10,20);
+    int data = random(10,40);
+    
     // Arma el payload JSON manualmente
     String payload = "{\"valor\":" + String(data) +
                      ",\"mensaje\":\"Hola desde ESP32\"}";
 
-    mqtt.publish(MQTT_TOPIC, payload.c_str());
+    mqtt.publish(topicData.c_str(), payload.c_str());
     Serial.print("📤 Publicado en '");
-    Serial.print(MQTT_TOPIC);
+    Serial.print(topicData.c_str());
     Serial.print("': ");
     Serial.println(payload);
 

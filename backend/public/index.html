@@ -41,17 +41,30 @@
 
   <script>
     // WebSocket: conexión persistente, el servidor empuja los datos
-    const ws = new WebSocket(`ws://${location.host}`);
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${wsProtocol}//${location.host}`);
 
     let ledOn = false;
+    let currentDeviceId = null; 
 
     function toggleLed() {
+      if (!currentDeviceId) {
+        alert("⏳ Esperando recibir el ID del ESP32. Intenta en unos segundos.");
+        return;
+      }
+
       ledOn = !ledOn;
-      const cmd     = ledOn ? 'LED_ON' : 'LED_OFF';
+      
+      // Enviamos el comando y el ID del ESP32 al servidor
+      const payload = {
+        device_id: currentDeviceId,
+        command: ledOn ? 'LED_ON' : 'LED_OFF'
+      };
+
       const btn     = document.getElementById('btnLed');
       const status  = document.getElementById('ledStatus');
 
-      ws.send(cmd); // envía el comando al servidor Node.js via WebSocket
+      ws.send(JSON.stringify(payload)); 
 
       btn.textContent     = ledOn ? '💡 Apagar LED' : '💡 Encender LED';
       btn.style.background = ledOn ? '#ff0' : '#0f0';
@@ -69,6 +82,8 @@
     ws.onmessage = (event) => {
       try {
         const d = JSON.parse(event.data);
+
+        if (d.device_id) currentDeviceId = d.device_id;
 
         document.getElementById('valor').textContent     = d.valor   ?? '—';
         document.getElementById('mensaje').textContent   = d.mensaje ?? '—';
