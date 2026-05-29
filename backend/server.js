@@ -58,20 +58,30 @@ mqttClient.on('connect', () => {
 wss.on('connection', (ws) => {
   console.log('🖥️  Navegador conectado');
 
-  ws.on('message', (message) => {
+  ws.on('message', async (message) => {
     try {
       // Parseamos el JSON que ahora envía index.html
       const data = JSON.parse(message.toString());
+      const deviceID = data.device_id;
+      const command = data.command;
       
-      if (data.device_id && data.command) {
+      if (deviceID && command) {
         // Ruteamos el comando exclusivamente a ese ESP32
-        const topic = `control/led/${data.device_id}`;
-        console.log(`🕹️  Enviando comando '${data.command}' a '${topic}'`);
+        const topic = `control/led/${deviceID}`;
+        console.log(`🕹️  Enviando comando '${command}' a '${topic}'`);
         
-        mqttClient.publish(topic, data.command);
+        mqttClient.publish(topic, command);
+
+        if (command === 'LED_ON') {
+          await WateringEvent.create({
+            device_id:    deviceID,
+            plant_type:   devices.get(deviceID)?.plant_type,
+            triggered_by: 'manual'
+          });
+        }
       }
     } catch (error) {
-      console.error('❌ Error: El comando del navegador no es un JSON válido.');
+      console.error('❌ Error procesando el comando del navegador: ', error.message);
     }
   });
 
