@@ -18,6 +18,11 @@ mosquitto -c mosquitto.conf -v
 
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+
+const mongoose = require('mongoose');
+const SensorReading = require('./models/SensorReading');
+const WateringEvent = require('./models/WateringEvent');
+
 const express   = require('express');
 const mqtt      = require('mqtt');
 const WebSocket = require('ws');
@@ -29,6 +34,10 @@ const wss    = new WebSocket.Server({ server }); // WebSocket sobre el mismo pue
 
 app.use(express.json());
 app.use(express.static('public'));
+
+mongoose.connect(process.env.MONGODB_URI)
+  .then(() => console.log('✅ Conectado a MongoDB'))
+  .catch(err => console.error('❌ Error MongoDB:', err));
 
 // --- Conexión al broker MQTT ---
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {
@@ -49,20 +58,30 @@ mqttClient.on('connect', () => {
 wss.on('connection', (ws) => {
   console.log('🖥️  Navegador conectado');
 
-  ws.on('message', (message) => {
+  ws.on('message', async (message) => {
     try {
       // Parseamos el JSON que ahora envía index.html
       const data = JSON.parse(message.toString());
+      const deviceID = data.device_id;
+      const command = data.command;
       
-      if (data.device_id && data.command) {
+      if (deviceID && command) {
         // Ruteamos el comando exclusivamente a ese ESP32
-        const topic = `control/led/${data.device_id}`;
-        console.log(`🕹️  Enviando comando '${data.command}' a '${topic}'`);
+        const topic = `control/led/${deviceID}`;
+        console.log(`🕹️  Enviando comando '${command}' a '${topic}'`);
         
-        mqttClient.publish(topic, data.command);
+        mqttClient.publish(topic, command);
+
+        if (command === 'LED_ON') {
+          await WateringEvent.create({
+            device_id:    deviceID,
+            plant_type:   devices.get(deviceID)?.plant_type,
+            triggered_by: 'manual'
+          });
+        }
       }
     } catch (error) {
-      console.error('❌ Error: El comando del navegador no es un JSON válido.');
+      console.error('❌ Error procesando el comando del navegador: ', error.message);
     }
   });
 
@@ -70,7 +89,7 @@ wss.on('connection', (ws) => {
 });
 
 // Cuando llega un mensaje MQTT, lo reenvía a todos los navegadores conectados
-mqttClient.on('message', (topic, message) => {
+mqttClient.on('message', async (topic, message) => {
   let payload;
   try {
     payload = JSON.parse(message.toString());
@@ -94,6 +113,14 @@ mqttClient.on('message', (topic, message) => {
 
   } else if (topic.startsWith('sensor/data/')) {
     const deviceID = topic.split('/')[2];   // extrae el ID del topic
+
+    await SensorReading.create({
+      device_id:  deviceID,
+      plant_type: devices.get(deviceID)?.plant_type,
+      valor:      payload.valor,
+      mensaje:    payload.mensaje
+    });
+
     broadcastToClients({ type: 'sensor_data', device_id: deviceID, ...payload });
   }
 });
