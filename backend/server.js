@@ -1,3 +1,4 @@
+<<<<<<< Updated upstream
 // Mi IP: 172.20.10.3
 
 /*
@@ -29,6 +30,29 @@ app.get('/data', (req, res) => res.json(lastData));
 
 // Sirve el dashboard
 app.use(express.static('public'));
+=======
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+const frontendPath = path.join(__dirname, '../frontend');
+
+const mongoose = require('mongoose');
+const Device        = require('./models/Device');
+const SensorReading = require('./models/SensorReading');
+const WateringEvent = require('./models/WateringEvent');
+const PlantType     = require('./models/PlantType');
+
+const express   = require('express');
+const mqtt      = require('mqtt');
+const WebSocket = require('ws');
+const http      = require('http');
+
+const app    = express();
+const server = http.createServer(app);
+const wss    = new WebSocket.Server({ server }); // WebSocket sobre el mismo puerto
+
+app.use(express.json());
+app.use(express.static(frontendPath));
+>>>>>>> Stashed changes
 
 app.listen(3000, '0.0.0.0', () => {
   console.log('✅ Servidor corriendo en http://localhost:3000');
