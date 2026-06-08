@@ -44,7 +44,6 @@ ws.onmessage = (event) => {
     if (d.device_id) currentDeviceId = d.device_id;
 
     document.getElementById('valor').textContent     = d.humidity   ?? '—';
-    document.getElementById('mensaje').textContent   = d.mensaje ?? '—';
     document.getElementById('timestamp').textContent = new Date().toLocaleTimeString();
 
     // Agrega al log
