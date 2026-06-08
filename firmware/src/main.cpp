@@ -1,19 +1,19 @@
+#include "secrets.h"
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
-#include "soc/rtc_cntl_reg.h"
-#include "soc/soc.h"
+
+const char* WIFI_SSID = SECRET_WIFI_SSID;
+const char* WIFI_PASSWORD = SECRET_WIFI_PASS;
+const char* MQTT_BROKER_URL = SECRET_MQTT_BROKER_URL;
+const int MQTT_PORT = SECRET_MQTT_PORT;
+const char* MQTT_USERNAME = SECRET_MQTT_USER;
+const char* MQTT_PASSWORD = SECRET_MQTT_PASS;
 
 #define LED_BUILTIN 2
-#define WIFI_SSID     **WIFI_SSID**
-#define WIFI_PASSWORD **WIFI_PASSWORD**
-#define MQTT_BROKER   **MQTT_BROKER_URL**
-#define MQTT_PORT     **MQTT_PORT**
-#define MQTT_USERNAME **MQTT_USERNAME**
-#define MQTT_PASSWORD **MQTT_PASSWORD**  
+#define PLANT_TYPE "tomate"
 
-#define PLANT_TYPE    "tomate"
 String deviceID;
 String topicData;
 String topicControl;
@@ -72,7 +72,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 void setup() {
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
   Serial.begin(921600);
   pinMode(LED_BUILTIN, OUTPUT);
   
@@ -92,7 +91,7 @@ void setup() {
   topicControl = "control/led/" + deviceID;
   
   wifiClient.setInsecure();
-  mqtt.setServer(MQTT_BROKER, MQTT_PORT);
+  mqtt.setServer(MQTT_BROKER_URL, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
   Serial.println("Iniciando MQTT...");
 }
