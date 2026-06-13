@@ -38,7 +38,6 @@ mqttClient.on('connect', () => {
   console.log('✅ Servidor conectado a EMQX Broker');
   mqttClient.subscribe('sensor/data/#');      // '#' = todos los subtopics
   mqttClient.subscribe('device/register');
-  mqttClient.subscribe('control/led/#');
 });
 
 wss.on('connection', (ws) => {

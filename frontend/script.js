@@ -43,8 +43,15 @@ ws.onmessage = (event) => {
 
     if (d.device_id) currentDeviceId = d.device_id;
 
-    document.getElementById('valor').textContent     = d.humidity   ?? '—';
     document.getElementById('timestamp').textContent = new Date().toLocaleTimeString();
+
+    if (d.humidity !== undefined) {
+      document.getElementById('valor').textContent = d.humidity;
+      // Aquí también podrían ir en el futuro las lecturas NPK y pH
+    }
+    if (d.type === 'watering_stopped' || d.type === 'watering_started') {
+      console.log(`Evento de riego recibido: ${d.type}`);
+    }
 
     // Agrega al log
     const log   = document.getElementById('log');
