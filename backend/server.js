@@ -45,6 +45,7 @@ wss.on('connection', (ws) => {
 
   PlantType.find({}).then(plants => {
     ws.send(JSON.stringify({ type: 'init_data', plants: plants }));
+    ws.send(JSON.stringify({ type: 'device_update', devices: getDevicesSnapshot() }));
   });
 
   ws.on('message', async (message) => {
