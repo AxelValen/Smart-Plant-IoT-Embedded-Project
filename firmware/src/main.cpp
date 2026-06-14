@@ -30,17 +30,14 @@ void connectMQTT() {
   while (!mqtt.connected()) {
     Serial.print("Conectando al broker MQTT...");
     // client ID único para este dispositivo
-    if (mqtt.connect((deviceID+"-"+PLANT_TYPE).c_str(), MQTT_USERNAME, MQTT_PASSWORD)) {
+    if (mqtt.connect(deviceID.c_str(), MQTT_USERNAME, MQTT_PASSWORD)) {
       Serial.println(" ✅ conectado!");
 
       mqtt.subscribe(topicControl.c_str());
       mqtt.subscribe("control/led/global");
 
       // Publica un mensaje de registro con los atributos del dispositivo
-      String reg = "{\"device_id\":\"" + deviceID +
-               "\",\"plant_type\":\"" + String(PLANT_TYPE) +
-               "\",\"status\":\"online\"}";
-
+      String reg = "{\"device_id\":\"" + deviceID + "\",\"status\":\"pending\"}";
       mqtt.publish(topicRegister.c_str(), reg.c_str(), true);
     } else {
       Serial.print(" ❌ falló, rc=");
@@ -116,8 +113,7 @@ void loop() {
     int data = random(50,90);
     
     // Arma el payload JSON manualmente
-    String payload = "{\"humidity\":" + String(data) +
-                     ",\"mensaje\":\"Hola desde ESP32\"}";
+    String payload = "{\"humidity\":" + String(data) + "}";
 
     mqtt.publish(topicData.c_str(), payload.c_str());
     Serial.print("📤 Publicado en '");

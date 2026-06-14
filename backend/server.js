@@ -43,19 +43,45 @@ mqttClient.on('connect', () => {
 wss.on('connection', (ws) => {
   console.log('🖥️  Navegador conectado');
 
+  PlantType.find({}).then(plants => {
+    ws.send(JSON.stringify({ type: 'init_data', plants: plants }));
+  });
+
   ws.on('message', async (message) => {
     try {
-      // Parseamos el JSON que ahora envía index.html
       const data = JSON.parse(message.toString());
-      const deviceID = data.device_id;
       const cmd = data.command;
+      const deviceID = data.device_id;
       
-      console.log(`🕹️  Comando [${cmd}] para dispositivo [${deviceID}]`);
-      
-      // Publica en MQTT para que el ESP32 lo reciba
-      mqttClient.publish(`control/led/${deviceID}`, cmd);
+      // --- NUEVA LÓGICA DE ASIGNACIÓN ---
+      if (cmd === 'ASSIGN_PLANT') {
+        const selectedPlant = data.plant_type;
+        
+        // Actualiza en MongoDB
+        await Device.findOneAndUpdate(
+          { device_id: deviceID },
+          { plant_type: selectedPlant, status: 'online' },
+          { new: true }
+        );
+
+        // Carga las condiciones ideales de la BD y actualiza el mapa en memoria
+        const plantInfo = await PlantType.findOne({ name: selectedPlant });
+        devices.set(deviceID, {
+          plant_type: selectedPlant,
+          ideal: plantInfo ? plantInfo.ideal : null,
+          status: 'online',
+          lastReading: null
+        });
+
+        console.log(`✅ Dispositivo ${deviceID} asignado a: ${selectedPlant}`);
+        
+        // Notifica a todos los clientes que la lista de dispositivos cambió
+        broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
+        return; // Termina la ejecución para no caer en la lógica de los LEDs
+      }
   
       if (cmd === 'LED_ON') {
+        mqttClient.publish(`control/led/${deviceID}`, 'LED_ON');
         // Registra el inicio del riego
         wateringStart.set(deviceID, Date.now());
         const device = devices.get(deviceID);
@@ -80,6 +106,7 @@ wss.on('connection', (ws) => {
         broadcastToClients({ type: 'watering_started', device_id: deviceID, reason: 'manual' });
   
       } else if (cmd === 'LED_OFF') {
+        mqttClient.publish(`control/led/${deviceID}`, 'LED_OFF');
         // Calcula la duración y actualiza el último evento de riego
         const startTime = wateringStart.get(deviceID);
         if (startTime) {
