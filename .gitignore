@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 secrets.h
+simulate_devices.js
 
 docs/
 
