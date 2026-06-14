@@ -2,39 +2,67 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>ESP32 MQTT Monitor</title>
+  <title>Smart-Plant - Dashboard</title>
   <style>
     body { font-family: monospace; background: #111; color: #0f0; padding: 2rem; }
-    h1   { color: #0f0; }
-    .value  { font-size: 3rem; color: #0f0; }
+    h1, h2 { color: #0f0; border-bottom: 1px solid #333; padding-bottom: 0.5rem; }
+    h2 { font-size: 1.2rem; margin-top: 2rem; color: #888; }
     .label  { color: #888; font-size: 0.9rem; }
     #status { font-size: 0.85rem; margin-bottom: 1rem; }
-    #log    { margin-top: 2rem; max-height: 200px; overflow-y: auto;
-              border-top: 1px solid #333; padding-top: 1rem; }
+    
+    /* Grid modular para tarjetas de dispositivos */
+    .grid-container {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+      margin-top: 1rem;
+    }
+    
+    /* Estilo de Tarjetas Operativas e Incipientes */
+    .card {
+      border: 1px solid #333;
+      padding: 1.5rem;
+      background: #1a1a1a;
+      border-radius: 4px;
+    }
+    .card.pending {
+      border: 1px dashed #ff0;
+    }
+    .card h3 { margin-top: 0; color: #fff; font-size: 1rem; }
+    
+    .value  { font-size: 2.5rem; color: #0f0; margin: 0.5rem 0; }
+    
+    .btn {
+      color: #111; border: none; padding: 0.6rem 1.2rem;
+      font-size: 1rem; font-family: monospace; cursor: pointer; border-radius: 4px;
+      width: 100%; margin-top: 0.5rem;
+    }
+    .btn-action { background: #0f0; }
+    .btn-provision { background: #ff0; }
+    
+    select {
+      background: #222; color: #0f0; border: 1px solid #333;
+      padding: 0.5rem; font-family: monospace; width: 100%; margin-bottom: 0.5rem;
+    }
+
+    #log { margin-top: 2rem; max-height: 150px; overflow-y: auto;
+           border-top: 1px solid #333; padding-top: 1rem; }
     .log-entry { color: #555; font-size: 0.8rem; }
   </style>
 </head>
 <body>
-  <h1>ESP32 MQTT Monitor</h1>
-  <div id="status">⏳ Conectando al servidor...</div>
+  <h1>Smart-Plant IoT Dashboard</h1>
+  <div id="status">⏳ Conectando al servidor central...</div>
 
-  <p class="label">Sensor Reading</p>
-  <div class="value" id="valor">—</div>
-
-  <p class="label">Último update</p>
-  <div id="timestamp">—</div>
-
-  <div style="margin-top: 2rem; border-top: 1px solid #333; padding-top: 1.5rem;">
-    <p class="label">Control actuador</p>
-    <button id="btnLed" onclick="toggleLed()"
-      style="background:#0f0; color:#111; border:none; padding: 0.8rem 2rem;
-            font-size:1.2rem; font-family:monospace; cursor:pointer; border-radius:4px;">
-      💡 Encender LED
-    </button>
-    <span id="ledStatus" style="margin-left:1rem; color:#888;">Estado: desconocido</span>
+  <h2>📥 Módulos detectados</h2>
+  <div id="nodos-pendientes" class="grid-container">
+    <div class="label">No hay módulos nuevos esperando configuración en la red.</div>
   </div>
 
-  <div id="log"><p class="label">Log de mensajes:</p></div>
+  <h2>🌱 Red de monitoreo activa</h2>
+  <div id="nodos-activos" class="grid-container">
+    <div class="label">Esperando inicialización de dispositivos activos...</div>
+  </div>
 
   <script src="script.js"></script>
 </body>
