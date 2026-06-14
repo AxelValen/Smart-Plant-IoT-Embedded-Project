@@ -222,6 +222,13 @@ async function handleSensorData(deviceID, payload) {
     if (device) {
       device.lastReading = payload;
       device.health      = healthResult;
+      device.last_seen   = Date.now();
+      
+      // Si estaba offline y volvió a enviar datos, lo regresamos a online
+      if (device.status === 'offline') {
+         device.status = 'online';
+         broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
+      }
     }
 
     // ── Riego automático si la humedad está baja ─────────────────
@@ -371,7 +378,37 @@ function broadcastToClients(data) {
 
 mqttClient.on('error', (err) => console.error('❌ Error MQTT:', err));
 
+// ── Detección de módulos desconectados ────────────────
+setInterval(() => {
+  const now = Date.now();
+  let changed = false;
+  
+  devices.forEach((device, deviceID) => {
+    // Si han pasado más de 5 segundos sin telemetría, se declara offline
+    if (device.status === 'online' && device.last_seen && (now - device.last_seen > 5000)) {
+      device.status = 'offline';
+      changed = true;
+      console.log(`🔌 Módulo ${deviceID} desconectado (Timeout)`);
+      
+      // Detiene el riego en la base de datos si se desconectó regando
+      if (wateringStart.has(deviceID)) {
+          mqttClient.publish(`control/led/${deviceID}`, 'LED_OFF');
+          wateringStart.delete(deviceID);
+          broadcastToClients({ type: 'watering_stopped', device_id: deviceID, reason: 'timeout' });
+      }
+      
+      Device.findOneAndUpdate({ device_id: deviceID }, { status: 'offline' })
+        .catch(err => console.error('Error al actualizar BD:', err.message));
+    }
+  });
+  
+  if (changed) {
+    broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
+  }
+}, 5000);
+
 const PORT = process.env.PORT || 3000;
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🌐 Servidor en http://localhost:${PORT}`);
 });
