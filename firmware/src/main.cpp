@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
 
 const char* WIFI_SSID = SECRET_WIFI_SSID;
 const char* WIFI_PASSWORD = SECRET_WIFI_PASS;
@@ -11,8 +12,12 @@ const int MQTT_PORT = SECRET_MQTT_PORT;
 const char* MQTT_USERNAME = SECRET_MQTT_USER;
 const char* MQTT_PASSWORD = SECRET_MQTT_PASS;
 
+#define PIN_HUMIDITY      34    // pin del sensor de humedad
+#define PIN_TEMPERATURE   35    // pin del sensor de temperatura
+#define PIN_N        32    // pin lectura de Nitrógeno
+#define PIN_P         26    // pin lectura de Fósforo
+#define PIN_K         27    // pin lectura de Potasio
 #define LED_BUILTIN 2
-#define PLANT_TYPE "tomate"
 
 String deviceID;
 String topicData;
@@ -23,7 +28,6 @@ WiFiClientSecure wifiClient;
 PubSubClient mqtt(wifiClient);
 
 bool wifiConnected = false;
-int  contador      = 0;
 unsigned long lastPublish = 0;
 
 void connectMQTT() {
@@ -110,17 +114,28 @@ void loop() {
   // Publica cada 2 segundos
   if (millis() - lastPublish >= 2000) {
     lastPublish = millis();
-    int data = random(50,90);
-    
-    // Arma el payload JSON manualmente
-    String payload = "{\"humidity\":" + String(data) + "}";
 
-    mqtt.publish(topicData.c_str(), payload.c_str());
+    int humidity = random(50,90);
+    int temp = random(50,90);
+    int N = random(50,90);
+    int P = random(50,90);
+    int K = random(50,90);
+    
+    // Construye el payload JSON con ArduinoJson
+    JsonDocument doc;
+    doc["humidity"] = humidity;
+    doc["temperature"] = temp;
+    doc["nitrogeno"] = N;
+    doc["fosforo"] = P;
+    doc["potasio"] = K;
+
+    char payload[256];
+    serializeJson(doc, payload);
+
+    mqtt.publish(topicData.c_str(), payload);
     Serial.print("📤 Publicado en '");
     Serial.print(topicData.c_str());
     Serial.print("': ");
     Serial.println(payload);
-
-    contador++;
   }
 }
