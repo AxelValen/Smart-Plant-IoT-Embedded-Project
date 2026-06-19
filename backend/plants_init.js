@@ -23,13 +23,27 @@ const PlantType = require('./models/PlantType');
 
 const plants = [
   {
+    name:         'test_plant',
+    display_name: 'Planta de prueba',
+    description:  'Planta creada para verificar el funcionamiento de sensores/bomba',
+    ideal: {
+      humidity:    { min: 25, max: 80 },
+      temperature: { min: 25, max: 35 },
+      nitrogeno:   { min: 65, max: 120 }, // valor arbitrario para testear
+      fosforo:   { min: 65, max: 120 }, // valor arbitrario para testear
+      potasio:   { min: 65, max: 120 } // valor arbitrario para testear
+    }
+  },
+  {
     name:         'tomate',
     display_name: 'Tomate',
     description:  'Planta de fruto, requiere riego moderado y buena iluminación.',
     ideal: {
       humidity:    { min: 60, max: 80 },
       temperature: { min: 18, max: 27 },
-      light:       { min: 5000, max: 40000 }
+      nitrogeno:   { min: 65, max: 120 }, // valor arbitrario para testear
+      fosforo:   { min: 65, max: 120 }, // valor arbitrario para testear
+      potasio:   { min: 65, max: 120 } // valor arbitrario para testear
     }
   },
   {
@@ -39,7 +53,9 @@ const plants = [
     ideal: {
       humidity:    { min: 70, max: 90 },
       temperature: { min: 15, max: 22 },
-      light:       { min: 2000, max: 15000 }
+      nitrogeno:   { min: 65, max: 120 }, // valor arbitrario para testear
+      fosforo:   { min: 65, max: 120 }, // valor arbitrario para testear
+      potasio:   { min: 65, max: 120 } // valor arbitrario para testear
     }
   },
   {
@@ -49,7 +65,9 @@ const plants = [
     ideal: {
       humidity:    { min: 55, max: 75 },
       temperature: { min: 20, max: 30 },
-      light:       { min: 6000, max: 45000 }
+      nitrogeno:   { min: 65, max: 120 }, // valor arbitrario para testear
+      fosforo:   { min: 65, max: 120 }, // valor arbitrario para testear
+      potasio:   { min: 65, max: 120 } // valor arbitrario para testear
     }
   },
   {
@@ -59,7 +77,9 @@ const plants = [
     ideal: {
       humidity:    { min: 50, max: 70 },
       temperature: { min: 18, max: 30 },
-      light:       { min: 4000, max: 35000 }
+      nitrogeno:   { min: 65, max: 120 }, // valor arbitrario para testear
+      fosforo:   { min: 65, max: 120 }, // valor arbitrario para testear
+      potasio:   { min: 65, max: 120 } // valor arbitrario para testear
     }
   },
   {
@@ -69,7 +89,9 @@ const plants = [
     ideal: {
       humidity:    { min: 65, max: 85 },
       temperature: { min: 15, max: 25 },
-      light:       { min: 3000, max: 30000 }
+      nitrogeno:   { min: 65, max: 120 }, // valor arbitrario para testear
+      fosforo:   { min: 65, max: 120 }, // valor arbitrario para testear
+      potasio:   { min: 65, max: 120 } // valor arbitrario para testear
     }
   }
 ];
