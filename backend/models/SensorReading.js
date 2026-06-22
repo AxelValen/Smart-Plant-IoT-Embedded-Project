@@ -24,13 +24,6 @@ const sensorReadingSchema = new mongoose.Schema({
   },
 
   // ── Lecturas de sensores ──────────────────────────────────────
-  // Por ahora 'valor' mantiene compatibilidad con el código actual
-  // (el random de prueba). Cuando integres sensores reales,
-  // los campos humidity, temperature y light tendrán datos.
-
-  valor: {
-    type: Number   // campo de compatibilidad con la versión actual
-  },
 
   humidity: {
     type: Number   // % humedad del suelo  (0-100)
@@ -40,8 +33,16 @@ const sensorReadingSchema = new mongoose.Schema({
     type: Number   // °C temperatura ambiente
   },
 
-  light: {
-    type: Number   // lux iluminación
+  nitrogeno: {
+    type: Number   // ppm nitrógeno (N)
+  },
+
+  fosforo: {
+    type: Number   // ppm fósforo (P)
+  },
+
+  potasio: {
+    type: Number   // ppm potasio (K)
   },
 
   // Mensaje de texto que puede enviar el ESP32 (ej: "OK", "Error sensor")

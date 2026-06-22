@@ -235,7 +235,7 @@ function actualizarEstadoRiegoUI(deviceId, estaRegando, reason) {
     } else {
        // Restaura el botón manual
        btn.style.display = 'block';
-       btn.textContent = estaRegando ? '💧 Activar regado' : '💧 Desactivar regado';
+       btn.textContent = estaRegando ? '💧 Desactivar regado' : '💧 Activar regado';
        btn.style.background = estaRegando ? '#ff0' : '#0f0';
        status.innerHTML = `Estado: ${estaRegando ? 'ENCENDIDO 🟡' : 'APAGADO ⚫'}`;
     }

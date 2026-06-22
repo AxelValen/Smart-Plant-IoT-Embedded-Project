@@ -35,7 +35,9 @@ const plantTypeSchema = new mongoose.Schema({
   ideal: {
     humidity:    rangeSchema,   // % de humedad del suelo
     temperature: rangeSchema,   // °C
-    light:       rangeSchema    // lux
+    nitrogeno:   rangeSchema,    // mg/kg nitrógeno (N)
+    fosforo:   rangeSchema,    // mg/kg fosforo (P)
+    potasio:   rangeSchema    // mg/kg potasio (K)
   },
 
   // Descripción opcional para mostrar en la web

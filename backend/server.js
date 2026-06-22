@@ -140,6 +140,7 @@ wss.on('connection', (ws) => {
 // Cuando llega un mensaje MQTT, lo reenvía a todos los navegadores conectados
 mqttClient.on('message', async (topic, message) => {
   let payload;
+  
   try {
     payload = JSON.parse(message.toString());
   } catch {
@@ -184,7 +185,7 @@ async function handleDeviceRegister(payload) {
       lastReading: null
     });
 
-    console.log(`📋 Dispositivo registrado: ${device_id} → ${plant_type}`);
+    console.log(`📋 Dispositivo detectado: ${device_id} → ${plant_type}`);
 
     // Notifica al dashboard
     broadcastToClients({
@@ -207,15 +208,15 @@ async function handleSensorData(deviceID, payload) {
 
     // ── Guarda la lectura en MongoDB ─────────────────────────────
     await SensorReading.create({
-      device_id:     deviceID,
-      plant_type:    device?.plant_type,
-      valor:         payload.valor,
-      humidity:      payload.humidity,
-      temperature:   payload.temperature,
-      light:         payload.light,
-      mensaje:       payload.mensaje,
-      health_status: healthResult.status,
-      issues:        healthResult.issues
+      device_id:       deviceID,
+      plant_type:      device?.plant_type,
+      humidity:        payload.humidity,
+      temperature:     payload.temperature,
+      nitrogeno:       payload.nitrogeno,
+      fosforo:         payload.fosforo,
+      potasio:         payload.potasio,
+      health_status:   healthResult.status,
+      issues:          healthResult.issues
     });
 
     // ── Actualiza el estado en memoria ───────────────────────────
@@ -285,11 +286,25 @@ function evaluateHealth(ideal, reading) {
       issues.push(`temperatura alta (${reading.temperature}°C > ${ideal.temperature.max}°C)`);
   }
 
-  if (reading.light !== undefined) {
-    if (reading.light < ideal.light.min)
-      issues.push(`luz insuficiente (${reading.light} lux < ${ideal.light.min} lux)`);
-    if (reading.light > ideal.light.max)
-      issues.push(`luz excesiva (${reading.light} lux > ${ideal.light.max} lux)`);
+  if (reading.nitrogeno !== undefined) {
+    if (reading.nitrogeno < ideal.nitrogeno.min)
+      issues.push(`nitrógeno insuficiente (${reading.nitrogeno} ppm < ${ideal.nitrogeno.min} ppm)`);
+    if (reading.nitrogeno > ideal.nitrogeno.max)
+      issues.push(`nitrógeno excesiva (${reading.nitrogeno} ppm > ${ideal.nitrogeno.max} ppm)`);
+  }
+
+  if (reading.fosforo !== undefined) {
+    if (reading.fosforo < ideal.fosforo.min)
+      issues.push(`fósforo insuficiente (${reading.fosforo} ppm < ${ideal.fosforo.min} ppm)`);
+    if (reading.fosforo > ideal.fosforo.max)
+      issues.push(`fósforo excesiva (${reading.fosforo} ppm > ${ideal.fosforo.max} ppm)`);
+  }
+
+  if (reading.potasio !== undefined) {
+    if (reading.potasio < ideal.potasio.min)
+      issues.push(`potasio insuficiente (${reading.potasio} ppm < ${ideal.potasio.min} ppm)`);
+    if (reading.potasio > ideal.potasio.max)
+      issues.push(`potasio excesiva (${reading.potasio} ppm > ${ideal.potasio.max} ppm)`);
   }
 
   const needsWatering = reading.humidity !== undefined &&
