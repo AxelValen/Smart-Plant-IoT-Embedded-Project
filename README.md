@@ -1,5 +1,5 @@
 
-# 🌱 Smart-Plant: IoT Automated Irrigation & Telemetry System
+# 🌱 Smart-Plant: Sistema IoT de Telemetría y Riego Automatizado
 
 ![Estado: En Desarrollo](https://img.shields.io/badge/Status-Work_in_Progress-yellow)
 ![Hardware: ESP32](https://img.shields.io/badge/Hardware-ESP32-blue)
@@ -25,20 +25,63 @@ El proyecto está dividido en tres capas principales:
 2. **Capa de red (Comunicaciones):** Utiliza WiFi para conectar al ESP32 a internet. La transferencia de datos de telemetría y recepción de comandos de riego se gestiona mediante el protocolo MQTT.
 3. **Capa de aplicación (Backend/Frontend):** Un servidor desarrollado en Node.js procesa los mensajes MQTT, evalúa el estado de salud de las plantas, y almacena datos en MongoDB usando Mongoose. Un dashboard web interactivo provee control remoto y monitoreo en tiempo real.
 
-## 🛠️ Hardware Usado
-* **Microcontrolador:** ESP32 
-* **Sensor NPK** 
-* **Conversor RS485 - TTL:** Módulo MAX485
-* **Bomba peristáltica:** Kamoer NKP-DC-S10B
-* **Sensor de humedad/temperatura:** Adafruit STEMMA Capacitive Moisture Sensor
-* **Módulo relay:** SRD-05VDC-SL-C
+## Flujo de Funcionamiento
 
-## 🛠️ Tecnologías Usadas
-* **Firmware:** C++, PlatformIO.
-* **Comunicaciones:** Protocolo MQTT (PubSubClient), WebSockets.
-* **Backend:** Node.js, Express.js.
-* **Base de Datos:** MongoDB (NoSQL) con Mongoose.
-* **Frontend:** Dashboard interactivo (HTML, CSS, Vanilla JS).
+1. El ESP32 se conecta a WiFi y al broker MQTT.
+2. El dispositivo publica un mensaje de registro en `device/register`.
+3. El backend detecta el nuevo módulo y lo muestra como pendiente en el dashboard.
+4. El usuario asigna un tipo de planta desde la interfaz web.
+5. El ESP32 publica lecturas periódicas en `sensor/data/<device_id>`.
+6. El backend compara las lecturas contra los rangos ideales almacenados en MongoDB.
+7. Si la humedad está por debajo del mínimo, el backend activa riego automático publicando `LED_ON`.
+8. Cuando las condiciones vuelven al rango esperado, el backend publica `LED_OFF`.
+9. Cada lectura y evento de riego queda registrado para consulta histórica.
+
+## 🛠️ Tecnologías Utilizadas
+
+| Capa | Tecnologías |
+| --- | --- |
+| Firmware | ESP32, Arduino Framework, PlatformIO, C++ |
+| Sensores | Adafruit Seesaw (humedad/temperatura), sensor NPK con módulo RS485/TTL |
+| Actuadores | Bomba: Kamoer NKP-DC-S10B; Relay: SRD-05VDC-SL-C |
+| Comunicación | WiFi, MQTT, PubSubClient |
+| Backend | Node.js, Express, WebSocket, mqtt.js |
+| Base de datos | MongoDB, Mongoose |
+| Frontend | HTML, CSS, JavaScript |
+| Simulación | Node.js + MQTT |
+
+## Estructura del Proyecto
+
+```text
+.
+├── backend/
+│   ├── models/
+│   │   ├── Device.js
+│   │   ├── PlantType.js
+│   │   ├── SensorReading.js
+│   │   └── WateringEvent.js
+│   ├── package.json
+│   ├── plants_init.js
+│   ├── server.js
+│   └── simulate_devices.js
+├── docs/
+│   ├── Borrador v1 Memoria Técnica Proyecto Smart Plant.docx
+│   └── Borrador v1 Memoria Técnica Proyecto Smart Plant.pdf
+├── firmware/
+│   ├── include/
+│   │   ├── hardware.h
+│   │   └── network.h
+│   ├── src/
+│   │   ├── hardware.cpp
+│   │   ├── main.cpp
+│   │   └── network.cpp
+│   └── platformio.ini
+├── frontend/
+│   ├── index.html
+│   └── script.js
+├── .env
+└── README.md
+```
 
 ## 🚀 Estado Actual 
 
