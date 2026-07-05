@@ -7,22 +7,105 @@ const Device        = require('./models/Device');
 const SensorReading = require('./models/SensorReading');
 const WateringEvent = require('./models/WateringEvent');
 const PlantType     = require('./models/PlantType');
+const User          = require('./models/User');
 
-const express   = require('express');
-const mqtt      = require('mqtt');
-const WebSocket = require('ws');
-const http      = require('http');
+const express    = require('express');
+const mqtt       = require('mqtt');
+const WebSocket  = require('ws');
+const http       = require('http');
+const jwt        = require('jsonwebtoken');
+const authMiddleware = require('./middleware/auth');
 
 const app    = express();
 const server = http.createServer(app);
 const wss    = new WebSocket.Server({ server }); // WebSocket sobre el mismo puerto
 
 app.use(express.json());
+app.get('/', (req, res) => {
+  res.redirect('/login.html');
+});
 app.use(express.static(frontendPath));
 
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Conectado a MongoDB'))
   .catch(err => console.error('❌ Error MongoDB:', err));
+
+// ================================================================
+//  RUTAS DE AUTENTICACIÓN
+// ================================================================
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email y contraseña son requeridos' });
+    }
+
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(409).json({ error: 'Ya existe un usuario con ese email' });
+    }
+
+    const user = await User.create({ email, password });
+
+    const token = jwt.sign(
+      { user_id: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({ token, user: { id: user._id, email: user.email } });
+
+  } catch (err) {
+    console.error('❌ Error en registro:', err.message);
+    res.status(500).json({ error: 'Error al registrar usuario' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email y contraseña son requeridos' });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(401).json({ error: 'Credenciales inválidas' });
+    }
+
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Credenciales inválidas' });
+    }
+
+    const token = jwt.sign(
+      { user_id: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({ token, user: { id: user._id, email: user.email } });
+
+  } catch (err) {
+    console.error('❌ Error en login:', err.message);
+    res.status(500).json({ error: 'Error al iniciar sesión' });
+  }
+});
+
+// Ruta protegida de ejemplo — datos del usuario autenticado
+app.get('/api/auth/me', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user_id).select('-password');
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    res.json({ user });
+  } catch (err) {
+    console.error('❌ Error al obtener usuario:', err.message);
+    res.status(500).json({ error: 'Error al obtener usuario' });
+  }
+});
 
 // --- Conexión al broker MQTT ---
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {

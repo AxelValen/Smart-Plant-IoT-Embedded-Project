@@ -3,8 +3,38 @@
    Maneja el catálogo, las copias de plantas, el jardín y el monitor.
    ========================================================= */
 
-const SOILSENSE_STORAGE_KEY = "soilsensePlants";
-const SOILSENSE_SENSOR_PREFIX = "soilsenseSensor:";
+const SP_TOKEN_KEY = "sp_token";
+
+// ── Redirige a login.html si no hay sesión iniciada ──────────────
+(function protegerPagina() {
+  const token = localStorage.getItem(SP_TOKEN_KEY);
+  if (!token) {
+    window.location.href = "login.html";
+  }
+})();
+
+// ── Extrae un identificador de usuario del JWT (sin verificar,
+//    solo para namespacear los datos en localStorage) ────────────
+function obtenerIdentificadorDeUsuario() {
+  const token = localStorage.getItem(SP_TOKEN_KEY);
+  if (!token) return "anon";
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    return payload.user_id || payload.email || "anon";
+  } catch (error) {
+    console.warn("No se pudo leer el token:", error);
+    return "anon";
+  }
+}
+
+// ── Cierra sesión: borra el token y regresa al login ─────────────
+function logout() {
+  localStorage.removeItem(SP_TOKEN_KEY);
+  window.location.href = "login.html";
+}
+
+const SOILSENSE_STORAGE_KEY = `soilsensePlants:${obtenerIdentificadorDeUsuario()}`;
+const SOILSENSE_SENSOR_PREFIX = `soilsenseSensor:${obtenerIdentificadorDeUsuario()}:`;
 
 let selectedGardenInstanceId = null;
 let monitorTimerId = null;

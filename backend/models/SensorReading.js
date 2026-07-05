@@ -10,6 +10,15 @@ const mongoose = require('mongoose');
 
 const sensorReadingSchema = new mongoose.Schema({
 
+  // Dueño del dispositivo que generó la lectura (desnormalizado
+  // para poder filtrar el historial por usuario sin hacer join)
+  user_id: {
+    type:     mongoose.Schema.Types.ObjectId,
+    ref:      'User',
+    required: true,
+    index:    true
+  },
+
   // Referencia al dispositivo que envió la lectura
   device_id: {
     type:     String,

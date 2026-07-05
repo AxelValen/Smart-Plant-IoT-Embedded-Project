@@ -9,6 +9,14 @@ const mongoose = require('mongoose');
 
 const deviceSchema = new mongoose.Schema({
 
+  // Dueño del dispositivo
+  user_id: {
+    type:     mongoose.Schema.Types.ObjectId,
+    ref:      'User',
+    required: true,
+    index:    true
+  },
+
   // ID único basado en la MAC del chip (ej: "AABBCCDDEEFF")
   device_id: {
     type:     String,

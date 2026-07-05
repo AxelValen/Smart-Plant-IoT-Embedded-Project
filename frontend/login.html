@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login — Smart-Plant</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .auth-wrap {
+      width: min(28rem, calc(100% - 2rem));
+      margin: 3.5rem auto 5rem;
+    }
+    .auth-card {
+      background: #ffffff;
+      border: 1px solid #ded3c5;
+      border-radius: 20px;
+      box-shadow: 0 12px 34px rgba(61, 43, 31, 0.1);
+      padding: 2rem;
+    }
+    .auth-tabs {
+      display: flex;
+      gap: 0.3rem;
+      padding: 0.35rem;
+      background: var(--crema);
+      border: 1px solid #e0d8cc;
+      border-radius: 30px;
+      margin-bottom: 1.8rem;
+    }
+    .auth-tab {
+      flex: 1;
+      padding: 0.55rem 1rem;
+      border: none;
+      border-radius: 20px;
+      background: transparent;
+      color: var(--muted);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease, color 0.2s ease;
+    }
+    .auth-tab.activo {
+      background: var(--hoja);
+      color: #ffffff;
+    }
+    .auth-form { display: none; }
+    .auth-form.activo { display: block; }
+    .form-group { margin-bottom: 1.1rem; }
+    .form-group label {
+      display: block;
+      margin-bottom: 0.4rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      color: var(--tierra);
+      text-transform: uppercase;
+      font-family: 'Space Mono', monospace;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 0.75rem 0.9rem;
+      background: var(--crema);
+      border: 1px solid #ded3c5;
+      border-radius: 10px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.9rem;
+      color: var(--texto);
+    }
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--hoja);
+    }
+    .auth-submit {
+      width: 100%;
+      padding: 0.85rem 1.2rem;
+      margin-top: 0.4rem;
+      background: var(--hoja);
+      border: none;
+      border-radius: 999px;
+      color: #ffffff;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+    .auth-submit:hover {
+      transform: translateY(-2px);
+      background: #3f6b4c;
+      box-shadow: 0 8px 20px rgba(74, 124, 89, 0.28);
+    }
+    .auth-submit:disabled {
+      opacity: 0.6;
+      cursor: default;
+      transform: none;
+    }
+    .form-message {
+      display: none;
+      margin-top: 1rem;
+      padding: 0.7rem 0.9rem;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+    .form-message.visible { display: block; }
+    .form-message.error {
+      background: #fff3f0;
+      border: 1px solid #e8b9ae;
+      color: #9d3f2e;
+    }
+    .form-message.success {
+      background: #eaf4ee;
+      border: 1px solid var(--hoja);
+      color: var(--hoja);
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a class="nav-brand" href="home.html">🌱 Smart-Plant</a>
+    <div class="nav-links">
+      <a href="login.html" class="activo">Login</a>
+    </div>
+  </nav>
+
+  <div class="page-header">
+    <p class="page-header-eyebrow">Cuenta</p>
+    <h1>Accede a tu jardín</h1>
+    <p>Inicia sesión o crea una cuenta para monitorear tus plantas.</p>
+  </div>
+
+  <div class="auth-wrap">
+    <div class="auth-card">
+
+      <div class="auth-tabs">
+        <button type="button" class="auth-tab activo" data-tab="login">Iniciar sesión</button>
+        <button type="button" class="auth-tab" data-tab="register">Registrarse</button>
+      </div>
+
+      <!-- ── Login ─────────────────────────────────────────── -->
+      <form id="loginForm" class="auth-form activo">
+        <div class="form-group">
+          <label for="loginEmail">Email</label>
+          <input type="email" id="loginEmail" name="email" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="loginPassword">Contraseña</label>
+          <input type="password" id="loginPassword" name="password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="auth-submit">Iniciar sesión</button>
+        <div id="loginMessage" class="form-message"></div>
+      </form>
+
+      <!-- ── Registro ──────────────────────────────────────── -->
+      <form id="registerForm" class="auth-form">
+        <div class="form-group">
+          <label for="registerEmail">Email</label>
+          <input type="email" id="registerEmail" name="email" required autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="registerPassword">Contraseña</label>
+          <input type="password" id="registerPassword" name="password" required minlength="6" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="registerPassword2">Confirmar contraseña</label>
+          <input type="password" id="registerPassword2" name="password2" required minlength="6" autocomplete="new-password">
+        </div>
+        <button type="submit" class="auth-submit">Crear cuenta</button>
+        <div id="registerMessage" class="form-message"></div>
+      </form>
+
+    </div>
+  </div>
+
+  <footer>Smart-Plant — Sistema IoT para el monitoreo y cuidado remoto de plantas de maceta</footer>
+
+  <script src="auth.js"></script>
+</body>
+</html>
