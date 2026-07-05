@@ -91,7 +91,7 @@ void processHumidity_Temp(int &humedadOut, int &tempOut) {
   float capCorregida = corregirPorTemperatura(capRaw, tempC);
   int humidity = calcularHumedad(capCorregida);
   
-  Serial.println("============================");
+  Serial.println("==================================");
   Serial.print("Temperatura:       "); Serial.print(tempC); Serial.println(" °C");
   Serial.print("Capacitancia raw:  "); Serial.println(capRaw);
   Serial.print("Capacitancia corr: "); Serial.println(capCorregida);

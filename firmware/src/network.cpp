@@ -27,7 +27,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   for (int i = 0; i < length; i++) message += (char)payload[i];
   Serial.print("📩 Comando recibido ["); Serial.print(topic); Serial.print("]: "); Serial.println(message);
   
-  if (String(topic) == topicControl.c_str() || String(topic) == "control/led/global") {
+  if (String(topic) == topicControl.c_str()) {
     if (message == "LED_ON") {
       digitalWrite(PIN_BOMBA, HIGH);
       Serial.println("🚿 Bomba encendida");
@@ -39,14 +39,15 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 void connectMQTT() {
-  while (!mqtt.connected()) {
+  unsigned long startAttemptTime = millis();
+  while (!mqtt.connected() && millis() - startAttemptTime < 10000) {
     Serial.print("Conectando al broker MQTT...");
     if (mqtt.connect(deviceID.c_str(), MQTT_USERNAME, MQTT_PASSWORD)) {
       Serial.println(" ✅ conectado!");
       mqtt.subscribe(topicControl.c_str());
       
       String reg = "{\"device_id\":\"" + deviceID + "\",\"status\":\"pending\"}";
-      mqtt.publish(topicRegister.c_str(), reg.c_str(), true);
+      mqtt.publish(topicRegister.c_str(), reg.c_str(), false);
     } else {
       Serial.print(" ❌ falló, rc=");
       Serial.print(mqtt.state());
@@ -54,14 +55,25 @@ void connectMQTT() {
       delay(2000);
     }
   }
+  if (!mqtt.connected()) {
+    Serial.println("⚠️ Timeout MQTT. Reiniciando dispositivo...");
+    ESP.restart(); 
+  }
 }
 
 void setupNetwork() {
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Conectando a WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
+  // Timeout para WiFi (Watchdog de 15 segundos)
+  unsigned long startAttemptTime = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 15000) {
     delay(500);
     Serial.print(".");
+  }
+  
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("\n⚠️ Timeout WiFi. Reiniciando dispositivo...");
+    ESP.restart();
   }
   Serial.println("\n✅ WiFi conectado!");
   
@@ -76,7 +88,9 @@ void setupNetwork() {
 
 void loopNetwork() {
   if (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
+    Serial.println("⚠️ WiFi desconectado. Intentando reconectar...");
+    WiFi.disconnect();
+    setupNetwork();
     return;
   }
   if (!mqtt.connected()) connectMQTT();
@@ -95,11 +109,10 @@ void publishSensorData(int humidity, int temp, byte n, byte p, byte k) {
   char payload[256];
   serializeJson(doc, payload);
 
-  Serial.println("-----------------------------");
+  Serial.println("--------------------------------");
   mqtt.publish(topicData.c_str(), payload);
   Serial.print("📤 Publicado en '");
   Serial.print(topicData.c_str());
   Serial.print("': ");
   Serial.println(payload);
-  Serial.println("============================");
 }
