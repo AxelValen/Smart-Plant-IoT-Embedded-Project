@@ -20,3 +20,5 @@ build/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+frontend/models/

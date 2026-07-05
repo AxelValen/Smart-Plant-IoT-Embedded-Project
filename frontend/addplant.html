@@ -1,0 +1,1054 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Add Plant — Smart-Plant</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Playfair+Display:wght@700&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="style.css">
+
+  <script
+    type="module"
+    src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.3.1/model-viewer.min.js">
+  </script>
+</head>
+
+<body>
+  <nav class="navbar">
+    <a class="nav-brand" href="home.html">🌱 Smart-Plant</a>
+
+    <div class="nav-links">
+      <a href="home.html">Home</a>
+      <a href="addplant.html" class="activo">Add Plant</a>
+      <a href="virtualgarden.html">Virtual Garden</a>
+      <a href="#" onclick="logout(); return false;">Cerrar sesión</a>
+    </div>
+  </nav>
+
+  <header class="page-header">
+    <p class="page-header-eyebrow">Virtual Garden · Catálogo</p>
+    <h1>Elige una planta</h1>
+    <p>Selecciona una categoría. Cada clic añade una nueva copia de la planta a tu jardín virtual.</p>
+  </header>
+
+  <main>
+    <!-- =====================================================
+         CARRUSEL PRINCIPAL: MENÚ DE CATEGORÍAS
+         Cada tarjeta enlaza con su carrusel inferior.
+         ===================================================== -->
+    <section class="featured-categories" aria-labelledby="category-title">
+      <div class="section-heading section-heading-center">
+        <p class="section-eyebrow">Explorar catálogo</p>
+        <h2 id="category-title">Categorías de plantas</h2>
+        <p>Usa las flechas y pulsa la categoría central para abrir su colección.</p>
+      </div>
+
+      <div
+        class="carousel"
+        data-start="0"
+        data-max-visibility="3"
+        aria-label="Carrusel de categorías"
+      >
+        <button
+          class="carousel-nav left"
+          type="button"
+          aria-label="Categoría anterior"
+        >
+          &#10094;
+        </button>
+
+        <!-- FOLLAJE -->
+        <div class="card-container">
+          <a
+            class="plant-3d-card category-card"
+            href="#catalogo-follaje"
+            aria-label="Abrir catálogo de plantas ornamentales de follaje"
+          >
+            <model-viewer
+              src="models/house_Plant.glb"
+              alt="Modelo 3D representativo de plantas de follaje"
+              auto-rotate
+              auto-rotate-delay="0"
+              rotation-per-second="18deg"
+              shadow-intensity="1"
+              shadow-softness="1"
+              field-of-view="25deg"
+              interaction-prompt="none">
+            </model-viewer>
+
+            <div class="plant-3d-info">
+              <strong>Follaje</strong>
+              <span class="plant-status">Ver colección ↓</span>
+            </div>
+          </a>
+        </div>
+
+        <!-- FLORALES -->
+        <div class="card-container">
+          <a
+            class="plant-3d-card category-card"
+            href="#catalogo-florales"
+            aria-label="Abrir catálogo de plantas ornamentales florales"
+          >
+            <model-viewer
+              src="models/orchids.glb"
+              alt="Modelo 3D representativo de plantas florales"
+              auto-rotate
+              auto-rotate-delay="0"
+              rotation-per-second="18deg"
+              shadow-intensity="1"
+              shadow-softness="1"
+              field-of-view="25deg"
+              interaction-prompt="none">
+            </model-viewer>
+
+            <div class="plant-3d-info">
+              <strong>Florales</strong>
+              <span class="plant-status">Ver colección ↓</span>
+            </div>
+          </a>
+        </div>
+
+        <!-- DESÉRTICAS -->
+        <div class="card-container">
+          <a
+            class="plant-3d-card category-card"
+            href="#catalogo-deserticas"
+            aria-label="Abrir catálogo de cactus y suculentas"
+          >
+            <model-viewer
+              src="models/cactus.glb"
+              alt="Modelo 3D representativo de plantas desérticas"
+              auto-rotate
+              auto-rotate-delay="0"
+              rotation-per-second="18deg"
+              shadow-intensity="1"
+              shadow-softness="1"
+              field-of-view="25deg"
+              interaction-prompt="none">
+            </model-viewer>
+
+            <div class="plant-3d-info">
+              <strong>Desérticas</strong>
+              <span class="plant-status">Ver colección ↓</span>
+            </div>
+          </a>
+        </div>
+
+        <!-- VEGETALES -->
+        <div class="card-container">
+          <a
+            class="plant-3d-card category-card"
+            href="#catalogo-vegetales"
+            aria-label="Abrir catálogo de vegetales, raíces, bulbos y tubérculos"
+          >
+            <model-viewer
+              src="models/tomato_plant.glb"
+              alt="Modelo 3D representativo de vegetales"
+              auto-rotate
+              auto-rotate-delay="0"
+              rotation-per-second="18deg"
+              shadow-intensity="1"
+              shadow-softness="1"
+              field-of-view="25deg"
+              interaction-prompt="none">
+            </model-viewer>
+
+            <div class="plant-3d-info">
+              <strong>Vegetales</strong>
+              <span class="plant-status">Ver colección ↓</span>
+            </div>
+          </a>
+        </div>
+
+        <!-- FRUTALES -->
+        <div class="card-container">
+          <a
+            class="plant-3d-card category-card"
+            href="#catalogo-frutales"
+            aria-label="Abrir catálogo de plantas frutales"
+          >
+            <model-viewer
+              src="models/peach_pack.glb"
+              alt="Modelo 3D representativo de plantas frutales"
+              auto-rotate
+              auto-rotate-delay="0"
+              rotation-per-second="18deg"
+              shadow-intensity="1"
+              shadow-softness="1"
+              field-of-view="15deg"
+              interaction-prompt="none">
+            </model-viewer>
+
+            <div class="plant-3d-info">
+              <strong>Frutales</strong>
+              <span class="plant-status">Ver colección ↓</span>
+            </div>
+          </a>
+        </div>
+
+        <button
+          class="carousel-nav right"
+          type="button"
+          aria-label="Categoría siguiente"
+        >
+          &#10095;
+        </button>
+      </div>
+    </section>
+
+    <!-- =====================================================
+         CATÁLOGOS INFERIORES
+         Reemplaza las rutas models/*.glb por tus archivos reales.
+         ===================================================== -->
+    <div class="catalog-area">
+
+      <!-- 1. FOLLAJE -->
+      <section
+        class="catalog-section"
+        id="catalogo-follaje"
+        aria-labelledby="titulo-follaje"
+      >
+        <div class="section-heading">
+          <p class="section-eyebrow">Ornamentales</p>
+          <h2 id="titulo-follaje">Plantas verdes de follaje</h2>
+          <p>Plantas decorativas apreciadas principalmente por la forma, el volumen y el color de sus hojas.</p>
+        </div>
+
+        <div class="catalog-carousel" data-start="0" tabindex="0">
+          <button
+            class="catalog-arrow left"
+            type="button"
+            aria-label="Planta anterior de follaje"
+          >
+            &#10094;
+          </button>
+
+          <div class="catalog-track">
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="monstera"
+              data-plant-name="Monstera"
+              data-plant-type="Ornamental de follaje"
+              data-model="models/monstera.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/monstera.glb"
+                alt="Modelo 3D de una Monstera"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Follaje tropical</span>
+                <strong>Monstera</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="pothos"
+              data-plant-name="Pothos"
+              data-plant-type="Ornamental de follaje"
+              data-model="models/pothos.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/pothos.glb"
+                alt="Modelo 3D de un Pothos"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Trepadora de interior</span>
+                <strong>Pothos</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="begonia rex"
+              data-plant-name="Begonia Rex"
+              data-plant-type="Ornamental de follaje"
+              data-model="models/begonia_rex.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/begonia_rex.glb"
+                alt="Modelo 3D de una Begonia Rex"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Follaje estampado</span>
+                <strong>Begonia Rex</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="helecho"
+              data-plant-name="Helecho"
+              data-plant-type="Ornamental de follaje"
+              data-model="models/fern.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/helecho.glb"
+                alt="Modelo 3D de un helecho"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Follaje frondoso</span>
+                <strong>Helecho</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="sansevieria"
+              data-plant-name="Sansevieria"
+              data-plant-type="Ornamental de follaje"
+              data-model="models/sansevieria.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/sansevieria.glb"
+                alt="Modelo 3D de una Sansevieria"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Follaje vertical</span>
+                <strong>Sansevieria</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+          </div>
+
+          <button
+            class="catalog-arrow right"
+            type="button"
+            aria-label="Planta siguiente de follaje"
+          >
+            &#10095;
+          </button>
+        </div>
+      </section>
+
+      <!-- 2. FLORALES -->
+      <section
+        class="catalog-section"
+        id="catalogo-florales"
+        aria-labelledby="titulo-florales"
+      >
+        <div class="section-heading">
+          <p class="section-eyebrow">Ornamentales</p>
+          <h2 id="titulo-florales">Plantas florales</h2>
+          <p>Especies cultivadas por sus flores, colores, formas y valor decorativo.</p>
+        </div>
+
+        <div class="catalog-carousel" data-start="0" tabindex="0">
+          <button
+            class="catalog-arrow left"
+            type="button"
+            aria-label="Planta floral anterior"
+          >
+            &#10094;
+          </button>
+
+          <div class="catalog-track">
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="orquidea"
+              data-plant-name="Orquídea"
+              data-plant-type="Ornamental floral"
+              data-model="models/orchids.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/orchids.glb"
+                alt="Modelo 3D de una orquídea"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Floral tropical</span>
+                <strong>Orquídea</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="rosa"
+              data-plant-name="Rosa"
+              data-plant-type="Ornamental floral"
+              data-model="models/rose2.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/rose2.glb"
+                alt="Modelo 3D de una rosa"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Arbusto floral</span>
+                <strong>Rosa</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="tulipan"
+              data-plant-name="Tulipán"
+              data-plant-type="Ornamental floral"
+              data-model="models/tulip.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/tulip.glb"
+                alt="Modelo 3D de un tulipán"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Planta de bulbo</span>
+                <strong>Tulipán</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="geranio"
+              data-plant-name="Geranio"
+              data-plant-type="Ornamental floral"
+              data-model="models/geranium.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/geranium.glb"
+                alt="Modelo 3D de un geranio"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Floral de maceta</span>
+                <strong>Geranio</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="hortensia"
+              data-plant-name="Hortensia"
+              data-plant-type="Ornamental floral"
+              data-model="models/hydrangea.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/hydrangea.glb"
+                alt="Modelo 3D de una hortensia"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Arbusto floral</span>
+                <strong>Hortensia</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+          </div>
+
+          <button
+            class="catalog-arrow right"
+            type="button"
+            aria-label="Planta floral siguiente"
+          >
+            &#10095;
+          </button>
+        </div>
+      </section>
+
+      <!-- 3. DESÉRTICAS -->
+      <section
+        class="catalog-section"
+        id="catalogo-deserticas"
+        aria-labelledby="titulo-deserticas"
+      >
+        <div class="section-heading">
+          <p class="section-eyebrow">Cactus y suculentas</p>
+          <h2 id="titulo-deserticas">Plantas desérticas</h2>
+          <p>Plantas adaptadas a almacenar agua y sobrevivir en condiciones secas.</p>
+        </div>
+
+        <div class="catalog-carousel" data-start="0" tabindex="0">
+          <button
+            class="catalog-arrow left"
+            type="button"
+            aria-label="Planta desértica anterior"
+          >
+            &#10094;
+          </button>
+
+          <div class="catalog-track">
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="cactus"
+              data-plant-name="Cactus"
+              data-plant-type="Cactus"
+              data-model="models/cactus.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/cactus.glb"
+                alt="Modelo 3D de un cactus"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Cactus ornamental</span>
+                <strong>Cactus</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="cactus-barril"
+              data-plant-name="Cactus barril"
+              data-plant-type="Cactus"
+              data-model="models/barrel_cactus.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/barrel_cactus.glb"
+                alt="Modelo 3D de un cactus barril"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Cactus globular</span>
+                <strong>Cactus barril</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="aloe-vera"
+              data-plant-name="Aloe vera"
+              data-plant-type="Suculenta"
+              data-model="models/aloe_vera1.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/aloe_vera1.glb"
+                alt="Modelo 3D de aloe vera"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                camera-orbit="auto auto 100%"
+                max-camera-orbit="auto auto 1000%"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Suculenta medicinal</span>
+                <strong>Aloe vera</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="euphorbia milii"
+              data-plant-name="Euphorbia milii"
+              data-plant-type="Semi Suculenta"
+              data-model="models/mili.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/mili.glb"
+                alt="Modelo 3D de una Euphorbia milii"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Semi suculenta en roseta</span>
+                <strong>Euphorbia milii</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="planta-jade"
+              data-plant-name="Planta jade"
+              data-plant-type="Suculenta"
+              data-model="models/jade_plant.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/jade_plant.glb"
+                alt="Modelo 3D de una planta jade"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Suculenta arbustiva</span>
+                <strong>Planta jade</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+          </div>
+
+          <button
+            class="catalog-arrow right"
+            type="button"
+            aria-label="Planta desértica siguiente"
+          >
+            &#10095;
+          </button>
+        </div>
+      </section>
+
+      <!-- 4. VEGETALES -->
+      <section
+        class="catalog-section"
+        id="catalogo-vegetales"
+        aria-labelledby="titulo-vegetales"
+      >
+        <div class="section-heading">
+          <p class="section-eyebrow">Hortalizas, raíces y tubérculos</p>
+          <h2 id="titulo-vegetales">Vegetales</h2>
+          <p>Incluye hortalizas de fruto y hoja, raíces comestibles, bulbos y tubérculos.</p>
+        </div>
+
+        <div class="catalog-carousel" data-start="0" tabindex="0">
+          <button
+            class="catalog-arrow left"
+            type="button"
+            aria-label="Vegetal anterior"
+          >
+            &#10094;
+          </button>
+
+          <div class="catalog-track">
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="tomate"
+              data-plant-name="Tomate"
+              data-plant-type="Hortaliza de fruto"
+              data-model="models/tomato_plant.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/tomato_plant.glb"
+                alt="Modelo 3D de una planta de tomate"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Hortaliza de fruto</span>
+                <strong>Tomate</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="batata"
+              data-plant-name="Batata"
+              data-plant-type="Tubérculo"
+              data-model="models/sweet_potato.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/sweet_potato.glb"
+                alt="Modelo 3D de una batata"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Tubérculo</span>
+                <strong>Batata</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="cebolla"
+              data-plant-name="Cebolla"
+              data-plant-type="Bulbo"
+              data-model="models/onion.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/onion.glb"
+                alt="Modelo 3D de una cebolla"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                camera-orbit="auto auto 200%"
+                max-camera-orbit="auto auto 1000%"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Bulbo comestible</span>
+                <strong>Cebolla</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="zanahoria"
+              data-plant-name="Zanahoria"
+              data-plant-type="Raíz comestible"
+              data-model="models/carrot.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/carrot.glb"
+                alt="Modelo 3D de una zanahoria"
+                auto-rotate
+                orientation="45deg 0deg 0deg"
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                camera-orbit="45deg auto 80%"
+                max-camera-orbit="auto auto 1000%"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Raíz comestible</span>
+                <strong>Zanahoria</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="lechuga"
+              data-plant-name="Lechuga"
+              data-plant-type="Hortaliza de hoja"
+              data-model="models/lettuce.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/lettuce.glb"
+                alt="Modelo 3D de una lechuga"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                camera-orbit="auto auto 150%"
+                max-camera-orbit="auto auto 1000%"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Hortaliza de hoja</span>
+                <strong>Lechuga</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+          </div>
+
+          <button
+            class="catalog-arrow right"
+            type="button"
+            aria-label="Vegetal siguiente"
+          >
+            &#10095;
+          </button>
+        </div>
+      </section>
+
+      <!-- 5. FRUTALES -->
+      <section
+        class="catalog-section"
+        id="catalogo-frutales"
+        aria-labelledby="titulo-frutales"
+      >
+        <div class="section-heading">
+          <p class="section-eyebrow">Árboles, arbustos y trepadoras</p>
+          <h2 id="titulo-frutales">Plantas frutales</h2>
+          <p>Plantas que producen frutos comestibles y pueden cultivarse en suelo, macetas o estructuras de soporte.</p>
+        </div>
+
+        <div class="catalog-carousel" data-start="0" tabindex="0">
+          <button
+            class="catalog-arrow left"
+            type="button"
+            aria-label="Planta frutal anterior"
+          >
+            &#10094;
+          </button>
+
+          <div class="catalog-track">
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="durazno"
+              data-plant-name="Durazno"
+              data-plant-type="Frutal arbóreo"
+              data-model="models/peach_pack.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/peach_pack.glb"
+                alt="Modelo 3D de una planta de durazno"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                field-of-view="15deg"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Frutal arbóreo</span>
+                <strong>Durazno</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="blueberry"
+              data-plant-name="Blueberry"
+              data-plant-type="Frutal arbóreo"
+              data-model="models/blueberry.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/blueberry.glb"
+                alt="Modelo 3D de una planta de arándano"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                camera-orbit="auto auto 200%"
+                max-camera-orbit="auto auto 1000%"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Frutal de baya</span>
+                <strong>Arándano</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="limon"
+              data-plant-name="Limón"
+              data-plant-type="Frutal arbóreo"
+              data-model="models/lemon_tree.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/lemon_tree.glb"
+                alt="Modelo 3D de una planta de limón"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Cítrico</span>
+                <strong>Limón</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="fresa"
+              data-plant-name="Fresa"
+              data-plant-type="Frutal herbáceo"
+              data-model="models/strawberry.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/strawberry.glb"
+                alt="Modelo 3D de una planta de fresa"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                camera-orbit="auto auto 200%"
+                max-camera-orbit="auto auto 1000%"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Frutal de porte bajo</span>
+                <strong>Fresa</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
+              data-plant-id="mandarina"
+              data-plant-name="Mandarina"
+              data-plant-type="Frutal trepador"
+              data-model="models/mandarin.glb"
+              data-credit="Añade aquí el autor y la licencia">
+              <model-viewer
+                src="models/mandarin.glb"
+                alt="Modelo 3D de una vid"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                camera-orbit="auto auto 200%"
+                max-camera-orbit="auto auto 1000%"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Frutal citrico</span>
+                <strong>Mandarina</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+          </div>
+
+          <button
+            class="catalog-arrow right"
+            type="button"
+            aria-label="Planta frutal siguiente"
+          >
+            &#10095;
+          </button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    Smart-Plant — Sistema IoT de Monitoreo de Suelo
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
