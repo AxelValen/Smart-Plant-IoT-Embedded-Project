@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Monitor de planta — Smart-Plant</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.3.1/model-viewer.min.js"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <a class="nav-brand" href="home.html">🌱 Smart-Plant</a>
+    <div class="nav-links">
+      <a href="home.html">Home</a>
+      <a href="addplant.html">Add Plant</a>
+      <a href="virtualgarden.html" class="activo">Virtual Garden</a>
+      <a href="#" onclick="logout(); return false;">Cerrar sesión</a>
+    </div>
+  </nav>
+
+  <header class="page-header">
+    <p class="page-header-eyebrow">Sensor en vivo · Instancia independiente</p>
+    <h1 id="monitorHeaderTitle">Monitor de planta</h1>
+    <p id="monitorHeaderSubtitle">Cargando la planta seleccionada…</p>
+  </header>
+
+  <main class="monitor-page" id="monitorPage">
+    <div class="monitor-top-row">
+      <a href="virtualgarden.html" class="back-link">← Volver al jardín</a>
+      <span class="live-pill"><span class="live-pill-dot"></span> En vivo</span>
+    </div>
+
+    <section class="monitor-plant-overview" id="monitorPlantOverview">
+      <model-viewer
+        id="monitorPlantModel"
+        alt="Modelo 3D de la planta monitorizada"
+        auto-rotate
+        auto-rotate-delay="0"
+        rotation-per-second="18deg"
+        shadow-intensity="1"
+        interaction-prompt="none">
+      </model-viewer>
+
+      <div class="monitor-plant-copy">
+        <p class="section-eyebrow">Módulo asignado</p>
+        <h2 id="monitorPlantName">Planta</h2>
+        <p id="monitorPlantType">Tipo de planta</p>
+        <span id="monitorPlantInstance" class="monitor-instance-code"></span>
+      </div>
+    </section>
+
+    <section id="monitorContent">
+      <div class="monitor-section-heading">
+        <div>
+          <p class="section-eyebrow">Lecturas actuales</p>
+          <h2>Condiciones del suelo</h2>
+        </div>
+        <p>Pasa el cursor o toca una medición para ver su histórico particular.</p>
+      </div>
+
+      <div class="sensor-grid">
+        <article class="sensor-card" data-metric="temp">
+          <span class="sensor-live-dot"></span>
+          <p class="sensor-eyebrow">Temperatura del suelo</p>
+          <div class="thermo-wrap">
+            <div class="thermo-scale">
+              <span>100°</span><span>75°</span><span>50°</span><span>25°</span><span>0°</span>
+            </div>
+            <div class="thermo-body">
+              <div class="thermo-tube"><div class="thermo-fill" id="thermoFill"></div></div>
+              <div class="thermo-bulb"></div>
+            </div>
+          </div>
+          <p class="sensor-value" id="tempValue">--°C</p>
+        </article>
+
+        <article class="sensor-card" data-metric="humedad">
+          <span class="sensor-live-dot"></span>
+          <p class="sensor-eyebrow">Humedad / nivel de agua</p>
+          <div class="tank-wrap">
+            <div class="tank-body">
+              <div class="tank-fill" id="tankFill">
+                <svg class="tank-wave" viewBox="0 0 200 20" preserveAspectRatio="none">
+                  <path d="M0 10 Q 25 0 50 10 T 100 10 T 150 10 T 200 10 V20 H0 Z"></path>
+                </svg>
+              </div>
+            </div>
+          </div>
+          <p class="sensor-value" id="humValue">--%</p>
+        </article>
+
+        <article class="sensor-card">
+          <span class="sensor-live-dot"></span>
+          <p class="sensor-eyebrow">Nutrientes NPK</p>
+          <div class="npk-stack">
+            <div class="npk-square npk-n" data-metric="nitrogeno">
+              <div class="npk-fill" id="nFill"></div>
+              <div class="npk-label">N <span id="nValue">--%</span></div>
+            </div>
+            <div class="npk-square npk-p" data-metric="fosforo">
+              <div class="npk-fill" id="pFill"></div>
+              <div class="npk-label">P <span id="pValue">--%</span></div>
+            </div>
+            <div class="npk-square npk-k" data-metric="potasio">
+              <div class="npk-fill" id="kFill"></div>
+              <div class="npk-label">K <span id="kValue">--%</span></div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+
+      <section class="plant-care-panel" aria-labelledby="plant-care-title">
+        <div class="watering-control-card">
+          <p class="section-eyebrow">Control de riego</p>
+          <h2 id="plant-care-title">Riego de la planta</h2>
+          <p>Activa el riego cuando la plataforma indique que la humedad está por debajo del nivel recomendado.</p>
+          <button class="watering-button" id="wateringButton" type="button">
+            💧 Activar riego
+          </button>
+        </div>
+
+        <div class="recommendations-card">
+          <p class="section-eyebrow">Cuidado de la planta</p>
+          <h2>Recomendaciones</h2>
+          <div class="recommendations-placeholder" id="recommendationsSpace">
+            Espacio de recomendaciones
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="monitor-not-found" id="monitorNotFound" hidden>
+      <h2>No encontramos esta planta</h2>
+      <p>La planta pudo haber sido eliminada o el enlace de monitoreo no es válido.</p>
+      <a href="virtualgarden.html" class="garden-primary-link">Volver al jardín</a>
+    </section>
+  </main>
+
+  <div class="hist-tooltip" id="histTooltip">
+    <div class="hist-head">
+      <span id="histTitle">Histórico</span>
+      <span id="histNow">--</span>
+    </div>
+    <svg id="histSvg" viewBox="0 0 260 110" preserveAspectRatio="none"></svg>
+    <div class="hist-foot"><span>hace 12 lecturas</span><span>ahora</span></div>
+  </div>
+
+  <footer>Smart-Plant — Sistema IoT de Monitoreo de Suelo</footer>
+  <script src="script.js"></script>
+</body>
+</html>

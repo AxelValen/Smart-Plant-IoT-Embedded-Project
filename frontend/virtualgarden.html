@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Virtual Garden — Smart-Plant</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.3.1/model-viewer.min.js"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <a class="nav-brand" href="home.html">🌱 Smart-Plant</a>
+    <div class="nav-links">
+      <a href="home.html">Home</a>
+      <a href="addplant.html">Add Plant</a>
+      <a href="virtualgarden.html" class="activo">Virtual Garden</a>
+      <a href="#" onclick="logout(); return false;">Cerrar sesión</a>
+    </div>
+  </nav>
+
+  <header class="page-header">
+    <p class="page-header-eyebrow">Jardín digital · Instancias independientes</p>
+    <h1>Virtual Garden</h1>
+    <p>Cada modelo representa una planta añadida. Al pulsar, se abrirán las opciones para eliminar la planta o ver su estado de monitoreo.</p>
+  </header>
+
+  <main class="virtual-garden-page">
+    <div class="garden-heading-row">
+      <div>
+        <p class="section-eyebrow">Tus plantas</p>
+        <h2>Jardín conectado</h2>
+        <p class="garden-help">Te presentamos tus plantas!</p>
+      </div>
+      <span class="garden-count" id="gardenCount">0 plantas</span>
+    </div>
+
+    <section id="gardenEmpty" class="garden-empty" hidden>
+      <div class="garden-empty-icon">🌱</div>
+      <h2>Tu jardín está vacío</h2>
+      <p>Selecciona plantas desde el catálogo. Puedes añadir la misma especie todas las veces que necesites.</p>
+      <a href="addplant.html" class="garden-primary-link">Abrir catálogo</a>
+    </section>
+
+    <section
+      id="gardenGrid"
+      class="virtual-garden-grid"
+      aria-label="Plantas añadidas al jardín"
+      aria-live="polite">
+    </section>
+
+
+  </main>
+
+  <dialog class="plant-actions-dialog" id="plantActionsDialog">
+    <form method="dialog" class="plant-actions-panel">
+      <button class="dialog-close" value="cancel" aria-label="Cerrar">×</button>
+      <p class="section-eyebrow">Planta seleccionada</p>
+      <h2 id="actionPlantName">Planta</h2>
+      <p id="actionPlantType" class="action-plant-type"></p>
+
+      <div class="plant-actions-buttons">
+        <a id="viewMonitorAction" class="dialog-action dialog-action-primary" href="monitor.html">
+          Ver datos de monitoreo
+        </a>
+        <button id="deletePlantAction" class="dialog-action dialog-action-danger" type="button">
+          Eliminar esta planta
+        </button>
+        <button class="dialog-action dialog-action-secondary" value="cancel">
+          Cancelar
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <footer>Smart-Plant — Sistema IoT de Monitoreo de Suelo</footer>
+  <script src="script.js"></script>
+</body>
+</html>

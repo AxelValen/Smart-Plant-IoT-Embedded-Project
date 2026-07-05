@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Home — Smart-Plant</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --tierra:     #3d2b1f;
+      --tierra-med: #5c4033;
+      --tierra-clr: #8b6355;
+      --hoja:       #4a7c59;
+      --hoja-light: #6aab7e;
+      --agua:       #4a90d9;
+      --arena:      #e8dcc8;
+      --crema:      #f5f0e8;
+      --texto:      #1e1410;
+      --muted:      #7a6558;
+    }
+    body { font-family: 'Space Grotesk', sans-serif; background-color: var(--crema); color: var(--texto); min-height: 100vh; }
+    nav { background: var(--tierra); padding: 1.2rem 2rem; display: flex; align-items: center; justify-content: space-between; border-bottom: 4px solid var(--hoja); position: sticky; top: 0; z-index: 100; }
+    .nav-brand { font-family: 'Space Mono', monospace; font-size: 0.85rem; color: var(--hoja-light); letter-spacing: 0.1em; text-decoration: none; }
+    .nav-links { display: flex; gap: 0.3rem; background: rgba(255,255,255,0.07); padding: 0.35rem; border-radius: 30px; border: 1px solid rgba(255,255,255,0.12); }
+    .nav-links a { font-size: 0.82rem; font-weight: 500; color: var(--arena); text-decoration: none; padding: 0.35rem 1rem; border-radius: 20px; transition: background 0.2s, color 0.2s; }
+    .nav-links a:hover, .nav-links a.activo { background: var(--hoja); color: white; }
+    .hero { background: var(--tierra); padding: 5rem 2rem 4rem; text-align: center; position: relative; overflow: hidden; }
+    .hero::before { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 120%, var(--hoja) 0%, transparent 65%); opacity: 0.18; }
+    .hero-eyebrow { font-family: 'Space Mono', monospace; font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--hoja-light); margin-bottom: 1.2rem; }
+    .hero h1 { font-family: 'Playfair Display', serif; font-size: clamp(2.4rem, 5vw, 4rem); font-weight: 700; color: var(--arena); line-height: 1.15; margin-bottom: 1rem; }
+    .hero h1 em { font-style: italic; color: var(--hoja-light); }
+    .hero-sub { font-size: 1rem; color: var(--tierra-clr); max-width: 520px; margin: 0 auto 2rem; line-height: 1.7; }
+    .hero-cta { display: inline-flex; gap: 0.8rem; flex-wrap: wrap; justify-content: center; }
+    .btn { display: inline-block; padding: 0.75rem 1.8rem; border-radius: 30px; font-size: 0.85rem; font-weight: 600; text-decoration: none; transition: transform 0.15s, box-shadow 0.15s; }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.2); }
+    .btn-primary { background: var(--hoja); color: white; }
+    .btn-outline { background: transparent; color: var(--arena); border: 1px solid rgba(255,255,255,0.25); }
+    main { max-width: 860px; margin: 0 auto; padding: 3.5rem 1.5rem; }
+    .seccion { margin-bottom: 3.5rem; }
+    .seccion-titulo { font-family: 'Space Mono', monospace; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--tierra-clr); margin-bottom: 1.2rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--arena); }
+    .seccion h2 { font-family: 'Playfair Display', serif; font-size: 1.7rem; font-weight: 700; color: var(--tierra); margin-bottom: 0.8rem; line-height: 1.3; }
+    .seccion p { font-size: 0.95rem; line-height: 1.8; color: var(--muted); margin-bottom: 1rem; }
+    .seccion p strong { color: var(--texto); font-weight: 600; }
+    .componentes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+    .comp-card { background: white; border-radius: 12px; padding: 1.3rem 1.5rem; border: 1px solid #e0d8cc; position: relative; overflow: hidden; }
+    .comp-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+    .comp-card.verde::before  { background: var(--hoja); }
+    .comp-card.azul::before   { background: var(--agua); }
+    .comp-card.tierra::before { background: var(--tierra-clr); }
+    .comp-card.npk::before    { background: #9b59b6; }
+    .comp-icono { font-size: 1.6rem; margin-bottom: 0.6rem; }
+    .comp-nombre { font-family: 'Space Mono', monospace; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.3rem; }
+    .comp-desc { font-size: 0.83rem; color: var(--muted); line-height: 1.6; }
+    .flujo { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-top: 1.5rem; }
+    .flujo-paso { background: white; border: 1px solid #e0d8cc; border-radius: 10px; padding: 0.7rem 1.1rem; font-size: 0.82rem; font-weight: 600; color: var(--texto); white-space: nowrap; }
+    .flujo-arrow { color: var(--hoja); font-size: 1rem; font-weight: 700; }
+    .highlight { background: var(--tierra); border-radius: 14px; padding: 2rem; margin-top: 1.5rem; position: relative; overflow: hidden; }
+    .highlight::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--hoja); }
+    .highlight p { color: var(--arena); font-size: 0.92rem; line-height: 1.8; margin-bottom: 0; }
+    .highlight strong { color: var(--hoja-light); }
+    .code-tag { background: var(--arena); padding: 0.1rem 0.4rem; border-radius: 4px; font-family: 'Space Mono', monospace; font-size: 0.82rem; }
+    footer { background: var(--tierra); text-align: center; padding: 1.5rem; font-family: 'Space Mono', monospace; font-size: 0.7rem; color: var(--tierra-clr); border-top: 4px solid var(--hoja); }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a class="nav-brand" href="home.html">🌱 Smart-Plant</a>
+    <div class="nav-links">
+      <a href="home.html" class="activo">Home</a>
+      <a href="addplant.html">Add Plant</a>
+      <a href="virtualgarden.html">Virtual Garden</a>
+      <a href="#" onclick="logout(); return false;">Cerrar sesión</a>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <p class="hero-eyebrow">IoT · Monitoreo de plantas · ESP32</p>
+    <h1>Tus plantas, <em>siempre conectadas</em></h1>
+    <p class="hero-sub">Un sistema de monitoreo para plantas de maceta en el hogar u oficina, con alertas, recomendaciones y control de riego remoto.</p>
+    <div class="hero-cta">
+    </div>
+  </div>
+
+  <main>
+
+    <div class="seccion">
+      <p class="seccion-titulo">El proyecto</p>
+      <h2>Cuidado inteligente para plantas de maceta</h2>
+      <p>Smart-Plant es un sistema de monitoreo para <strong>plantas de maceta en hogares y oficinas</strong>. Mediante un ESP32 y sensores de suelo, registra en tiempo real la temperatura, la humedad y los niveles de nitrógeno (N), fósforo (P) y potasio (K).</p>
+      <p>La plataforma compara cada lectura con una amplia base de datos que contiene los rangos óptimos de crecimiento de cada especie. De esta manera, puede indicar la condición actual de la planta, generar alertas y recomendar al usuario qué acción debe realizar para mejorar su cuidado.</p>
+    </div>
+
+    <div class="seccion">
+      <p class="seccion-titulo">Cómo funciona</p>
+      <h2>Del suelo a la pantalla</h2>
+      <div class="flujo">
+        <div class="flujo-paso">🪴 Planta</div>
+        <span class="flujo-arrow">→</span>
+        <div class="flujo-paso">📡 Sensores</div>
+        <span class="flujo-arrow">→</span>
+        <div class="flujo-paso">⚙️ ESP32</div>
+        <span class="flujo-arrow">→</span>
+        <div class="flujo-paso">📶 WiFi</div>
+        <span class="flujo-arrow">→</span>
+        <div class="flujo-paso">🗄️ Servidor</div>
+        <span class="flujo-arrow">→</span>
+        <div class="flujo-paso">🌐 Plataforma web</div>
+      </div>
+      <div class="highlight">
+        <p>El ESP32 obtiene las lecturas de los sensores y las envía mediante <strong>WiFi</strong> al servidor. La plataforma web recibe la información en tiempo real, la compara con los valores óptimos almacenados para la especie seleccionada y muestra el estado de la planta, sus alertas, recomendaciones y el historial de humedad, temperatura y nutrientes NPK.</p>
+      </div>
+    </div>
+
+    <div class="seccion">
+      <p class="seccion-titulo">Componentes del sistema</p>
+      <h2>Hardware y software</h2>
+      <div class="componentes-grid">
+        <div class="comp-card verde">
+          <div class="comp-icono">💧</div>
+          <p class="comp-nombre">Sensor de humedad</p>
+          <p class="comp-desc">Adafruit Seesaw I²C (0x36). Mide humedad capacitiva y temperatura con corrección térmica automática a 25 °C de referencia.</p>
+        </div>
+        <div class="comp-card npk">
+          <div class="comp-icono">🧪</div>
+          <p class="comp-nombre">Sensor NPK</p>
+          <p class="comp-desc">Sensor RS485 Modbus RTU. Lee nitrógeno, fósforo y potasio en mg/kg por el UART2 del ESP32 (pines RX=16, TX=17).</p>
+        </div>
+        <div class="comp-card azul">
+          <div class="comp-icono">🚿</div>
+          <p class="comp-nombre">Bomba peristáltica</p>
+          <p class="comp-desc">Controlada por el pin 19 del ESP32. Solo se enciende cuando el usuario pulsa el botón de riego después de recibir una alerta de humedad baja, y se apaga automáticamente al alcanzar el umbral correcto.</p>
+        </div>
+        <div class="comp-card tierra">
+          <div class="comp-icono">⚙️</div>
+          <p class="comp-nombre">ESP32 + servidor</p>
+          <p class="comp-desc">El ESP32 procesa las lecturas y las transmite por WiFi al servidor, que almacena, compara y presenta los datos en la plataforma web.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="seccion">
+      <p class="seccion-titulo">Riego remoto asistido</p>
+      <h2>El usuario decide cuándo regar</h2>
+      <p>Cuando la humedad cae por debajo del umbral definido para la planta, el sitio web genera una alerta y habilita la acción de riego. La bomba <strong>no se enciende de manera automática</strong>: el usuario debe activarla mediante el botón correspondiente, incluso si se encuentra fuera del hogar u oficina.</p>
+      <p>Una vez iniciado el riego, el sistema continúa midiendo la humedad y apaga automáticamente la bomba cuando se alcanza el umbral adecuado. Así se evita el exceso de agua y se mantiene el control final en manos del usuario.</p>
+    </div>
+
+
+    <div class="seccion">
+      <p class="seccion-titulo">Historial y recomendaciones</p>
+      <h2>Información útil para cada planta</h2>
+      <p>La plataforma conserva el historial de <strong>humedad, temperatura y nutrientes NPK</strong> de cada planta añadida al jardín virtual. Estos datos permiten observar tendencias, identificar cambios en el suelo y consultar recomendaciones específicas según la especie.</p>
+      <div class="highlight">
+        <p>Smart-Plant está pensado para personas que poseen varias plantas y desean cuidarlas con mayor facilidad. Mientras tengan acceso a Internet, podrán revisar su estado, recibir alertas y activar el riego desde cualquier lugar, sin tener que preocuparse constantemente por recordar cuándo echarles agua.</p>
+      </div>
+    </div>
+
+  </main>
+
+  <footer>Smart-Plant — Sistema IoT para el monitoreo y cuidado remoto de plantas de maceta</footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
