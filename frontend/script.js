@@ -98,16 +98,11 @@ function manejarMensajeWebSocket(data) {
 
   if (data.type === 'device_update') {
     deviceSnapshot = data.devices || {};
+    sincronizarJardinConDispositivos();
     renderizarJardinDesdeCache();
     actualizarContadoresDelCatalogo();
     manejarDispositivosPendientes();
     actualizarEstadoMonitorDesdeDispositivos();
-
-    const pendientes = Object.values(deviceSnapshot).filter((device) => device.status === 'pending');
-    if (pendientes.length > 0) {
-      mostrarToast(`Módulo detectado: ${pendientes[0].device_id}. Asigna una planta.`);
-    }
-
     return;
   }
 
@@ -123,7 +118,6 @@ function manejarMensajeWebSocket(data) {
 
   if (data.type === 'watering_stopped') {
     marcarRiegoEnMonitor(data.device_id, false);
-    return;
   }
 }
 
@@ -148,10 +142,7 @@ function inicializarCarruselPrincipal() {
         tarjeta.style.setProperty('--abs-offset', distancia / 3);
         tarjeta.style.pointerEvents = indice === tarjetaActiva ? 'auto' : 'none';
 
-        const opacidad = indice === tarjetaActiva
-          ? 1
-          : Math.max(0.08, 1 - distancia * 0.46);
-
+        const opacidad = indice === tarjetaActiva ? 1 : Math.max(0.08, 1 - distancia * 0.46);
         tarjeta.style.opacity = distancia >= maxVisibility ? '0' : String(opacidad);
         tarjeta.style.display = distancia > maxVisibility ? 'none' : 'block';
 
@@ -205,9 +196,7 @@ function inicializarCarruselesCatalogo() {
     const botonAnterior = carrusel.querySelector('.catalog-arrow.left');
     const botonSiguiente = carrusel.querySelector('.catalog-arrow.right');
     const inicioSolicitado = Number.parseInt(carrusel.dataset.start || '0', 10);
-    let activa = Number.isNaN(inicioSolicitado)
-      ? 0
-      : normalizarIndice(inicioSolicitado, tarjetas.length);
+    let activa = Number.isNaN(inicioSolicitado) ? 0 : normalizarIndice(inicioSolicitado, tarjetas.length);
 
     function actualizar() {
       tarjetas.forEach((tarjeta, indice) => {
@@ -275,6 +264,7 @@ function inicializarSeleccionDePlantas() {
 async function añadirNuevaInstancia(tarjeta) {
   const plantTypeName = tarjeta.dataset.plantName?.trim();
   const plantTypeKey = tarjeta.dataset.plantId?.trim();
+  const plantTypeLabel = tarjeta.dataset.plantType?.trim() || '';
   const modelSrc = tarjeta.dataset.model?.trim();
 
   if (!plantTypeName || !plantTypeKey) {
@@ -289,7 +279,7 @@ async function añadirNuevaInstancia(tarjeta) {
       body: JSON.stringify({
         plant_type_name: plantTypeName,
         plant_type_key: plantTypeKey,
-        plant_type: tarjeta.dataset.plantType?.trim() || '',
+        plant_type: plantTypeLabel,
         model_src: modelSrc
       })
     });
@@ -336,6 +326,21 @@ function normalizarClave(valor) {
     .replace(/[^a-z0-9]+/g, '-');
 }
 
+function sincronizarJardinConDispositivos() {
+  gardenCache = gardenCache.map((planta) => {
+    const matchedDevice = Object.values(deviceSnapshot).find((device) => device.garden_plant_id === planta._id);
+    if (matchedDevice) {
+      return { ...planta, device_id: matchedDevice.device_id };
+    }
+
+    if (planta.device_id && deviceSnapshot[planta.device_id]) {
+      return { ...planta, device_id: planta.device_id };
+    }
+
+    return planta;
+  });
+}
+
 function inicializarJardinVirtual() {
   const grid = document.getElementById('gardenGrid');
   if (!grid) return;
@@ -349,7 +354,6 @@ function inicializarJardinVirtual() {
       await apiFetch(`/api/garden/${currentMonitorPlant._id}`, { method: 'DELETE' });
       currentMonitorPlant = null;
       await cargarJardin();
-      renderizarJardinDesdeCache();
       if (dialogo?.open) dialogo.close();
       mostrarToast('Planta eliminada.');
     } catch (error) {
@@ -369,6 +373,7 @@ async function cargarJardin() {
   try {
     const response = await apiFetch('/api/garden');
     gardenCache = response.garden || [];
+    sincronizarJardinConDispositivos();
     renderizarJardinDesdeCache();
     actualizarContadoresDelCatalogo();
     manejarDispositivosPendientes();
@@ -416,11 +421,11 @@ function renderizarJardinDesdeCache() {
     const nombre = document.createElement('strong');
     nombre.textContent = obtenerNombreDePlanta(planta);
 
-    const estado = document.createElement('span');
-    estado.className = 'garden-plant-hint';
-    estado.textContent = planta.device_id ? `Asignada a ${planta.device_id}` : 'Sin dispositivo asignado';
+    const hint = document.createElement('span');
+    hint.className = 'garden-plant-hint';
+    hint.textContent = planta.device_id ? `Asignada a ${planta.device_id}` : 'Sin dispositivo asignado';
 
-    info.append(tipo, nombre, estado);
+    info.append(tipo, nombre, hint);
     tarjeta.append(modelo, info);
 
     const activar = () => abrirDialogoDePlanta(planta);
@@ -523,17 +528,25 @@ function renderizarMonitor(data) {
   const gardenPlant = data.garden_plant || currentMonitorPlant;
   const plantType = gardenPlant?.plant_type_id || {};
   const telemetry = data.telemetry || crearTelemetriaVacia(12);
+  const health = data.health || { status: 'desconocido', issues: [], needsWatering: false };
+  const deviceId = gardenPlant?.device_id || null;
+  const deviceStatus = data.device_status || (deviceId ? (deviceSnapshot[deviceId]?.status || 'offline') : 'unassigned');
 
   document.getElementById('monitorPlantOverview')?.removeAttribute('hidden');
   document.getElementById('monitorContent')?.removeAttribute('hidden');
   document.getElementById('monitorNotFound')?.setAttribute('hidden', '');
   document.getElementById('monitorHeaderTitle').textContent = obtenerNombreDePlanta(gardenPlant);
-  document.getElementById('monitorHeaderSubtitle').textContent = gardenPlant?.device_id
+  document.getElementById('monitorHeaderSubtitle').textContent = deviceId
     ? `Datos exclusivos del módulo asignado a ${obtenerNombreDePlanta(gardenPlant)}.`
     : 'La planta todavía no tiene un dispositivo asignado.';
   document.getElementById('monitorPlantName').textContent = obtenerNombreDePlanta(gardenPlant);
   document.getElementById('monitorPlantType').textContent = plantType.display_name || plantType.name || 'Tipo de planta';
-  document.getElementById('monitorPlantInstance').textContent = `ID: ${abreviarInstanceId(gardenPlant?._id)}`;
+  document.getElementById('monitorPlantInstance').textContent = deviceId || 'sin asignar';
+
+  const moduleStatus = document.getElementById('monitorModuleStatus');
+  if (moduleStatus) {
+    moduleStatus.textContent = deviceId ? 'Módulo asignado' : 'Sin módulo asignado';
+  }
 
   const modelo = document.getElementById('monitorPlantModel');
   if (modelo) {
@@ -545,13 +558,15 @@ function renderizarMonitor(data) {
   currentMonitorData = {
     ...data,
     telemetry,
-    state
+    state,
+    health
   };
 
   renderizarTodosLosSensores(state);
   inicializarTooltipDeSensores(state);
-  renderizarRecomendaciones(plantType.ideal);
-  actualizarBotonRiego(state, plantType.ideal, gardenPlant?.device_id);
+  renderizarRecomendaciones(plantType.ideal, health);
+  actualizarBotonRiego(state, plantType.ideal, deviceId, deviceStatus);
+  actualizarEstadoConexionMonitor(deviceStatus, deviceId);
 
   if (gardenPlant?.device_id) {
     currentMonitorPlant.device_id = gardenPlant.device_id;
@@ -702,12 +717,13 @@ function construirSparkline(history, color) {
   const width = 260;
   const height = 90;
   const pad = 10;
-  const min = Math.min(...history);
-  const max = Math.max(...history);
+  const puntosBase = Array.isArray(history) && history.length > 1 ? history : [0, 0];
+  const min = Math.min(...puntosBase);
+  const max = Math.max(...puntosBase);
   const range = max - min || 1;
-  const step = (width - pad * 2) / (history.length - 1);
+  const step = (width - pad * 2) / (puntosBase.length - 1);
 
-  const puntos = history.map((valor, indice) => {
+  const puntos = puntosBase.map((valor, indice) => {
     const x = pad + indice * step;
     const y = pad + (1 - (valor - min) / range) * (height - pad * 2);
     return [x, y];
@@ -724,7 +740,7 @@ function construirSparkline(history, color) {
   `;
 }
 
-function renderizarRecomendaciones(ideal) {
+function renderizarRecomendaciones(ideal, health) {
   const contenedor = document.getElementById('recommendationsSpace');
   if (!contenedor) return;
 
@@ -733,25 +749,35 @@ function renderizarRecomendaciones(ideal) {
     return;
   }
 
+  const issues = Array.isArray(health?.issues) ? health.issues : [];
+  const issuesHtml = issues.length > 0
+    ? `<ul class="recommendations-issues">${issues.map((issue) => `<li>${issue}</li>`).join('')}</ul>`
+    : '<p class="recommendations-ok">Sin alertas activas. La planta está dentro de rango.</p>';
+
   contenedor.innerHTML = `
-    <p>Humedad óptima: ${ideal.humidity.min}% - ${ideal.humidity.max}%</p>
-    <p>Temperatura óptima: ${ideal.temperature.min}°C - ${ideal.temperature.max}°C</p>
-    <p>Nitrógeno: ${ideal.nitrogeno.min} - ${ideal.nitrogeno.max}</p>
-    <p>Fósforo: ${ideal.fosforo.min} - ${ideal.fosforo.max}</p>
-    <p>Potasio: ${ideal.potasio.min} - ${ideal.potasio.max}</p>
+    <p class="recommendations-health">Estado: ${health?.status || 'desconocido'}</p>
+    ${issuesHtml}
+    <div class="recommendations-thresholds">
+      <p>Humedad óptima: ${ideal.humidity.min}% - ${ideal.humidity.max}%</p>
+      <p>Temperatura óptima: ${ideal.temperature.min}°C - ${ideal.temperature.max}°C</p>
+      <p>Nitrógeno: ${ideal.nitrogeno.min} - ${ideal.nitrogeno.max}</p>
+      <p>Fósforo: ${ideal.fosforo.min} - ${ideal.fosforo.max}</p>
+      <p>Potasio: ${ideal.potasio.min} - ${ideal.potasio.max}</p>
+    </div>
   `;
 }
 
-function actualizarBotonRiego(state, ideal, deviceId) {
+function actualizarBotonRiego(state, ideal, deviceId, deviceStatus) {
   const boton = document.getElementById('wateringButton');
   if (!boton) return;
 
   const humedadMinima = ideal?.humidity?.min ?? 0;
-  const puedeActivar = Boolean(deviceId) && !state.isWatering && state.latestHumidity < humedadMinima;
+  const puedeActivar = Boolean(deviceId) && deviceStatus === 'online' && !state.isWatering && state.latestHumidity < humedadMinima;
 
   boton.disabled = !state.isWatering && !puedeActivar;
   boton.textContent = state.isWatering ? '💧 Detener riego' : '💧 Activar riego';
   boton.dataset.deviceId = deviceId || '';
+  boton.dataset.deviceStatus = deviceStatus || 'unassigned';
   boton.dataset.humidityMin = String(humedadMinima);
 }
 
@@ -759,31 +785,37 @@ function manejarClickRiego() {
   const boton = document.getElementById('wateringButton');
   if (!boton || !currentMonitorData) return;
 
-  const deviceId = boton.dataset.deviceId;
+  const deviceId = boton.dataset.deviceId || currentMonitorPlant?.device_id || '';
   const ideal = currentMonitorData.garden_plant?.plant_type_id?.ideal || null;
   const state = currentMonitorData.state || {};
+  const deviceStatus = boton.dataset.deviceStatus || currentMonitorData.device_status || 'unassigned';
 
   if (!deviceId) {
-    console.error('La planta no tiene dispositivo asignado');
+    mostrarToast('No hay un módulo asignado para regar.');
+    return;
+  }
+
+  if (deviceStatus !== 'online' && !state.isWatering) {
+    mostrarToast('El módulo debe estar en línea para iniciar el riego manual.');
     return;
   }
 
   if (state.isWatering) {
     enviarComandoWS('LED_OFF', { device_id: deviceId });
     state.isWatering = false;
-    actualizarBotonRiego(state, ideal, deviceId);
+    actualizarBotonRiego(state, ideal, deviceId, deviceStatus);
     return;
   }
 
   const humedadMinima = ideal?.humidity?.min ?? 0;
   if (state.latestHumidity >= humedadMinima) {
-    console.error('La humedad actual todavía no está por debajo del umbral óptimo');
+    mostrarToast('La humedad todavía no está por debajo del umbral recomendado.');
     return;
   }
 
   enviarComandoWS('LED_ON', { device_id: deviceId });
   state.isWatering = true;
-  actualizarBotonRiego(state, ideal, deviceId);
+  actualizarBotonRiego(state, ideal, deviceId, deviceStatus);
 }
 
 function actualizarMonitorEnVivo(data) {
@@ -797,6 +829,8 @@ function actualizarMonitorEnVivo(data) {
   telemetry.potasio = pushHistory(telemetry.potasio, data.potasio);
 
   currentMonitorData.telemetry = telemetry;
+  currentMonitorData.device_status = deviceSnapshot[data.device_id]?.status || currentMonitorData.device_status || 'online';
+  currentMonitorData.health = currentMonitorData.health || { status: 'desconocido', issues: [], needsWatering: false };
   currentMonitorData.state = convertirTelemetriaAEstado(telemetry, currentMonitorData.garden_plant?.plant_type_id?.ideal || null);
   currentMonitorData.state.isWatering = currentMonitorData.state.isWatering || false;
 
@@ -808,7 +842,12 @@ function marcarRiegoEnMonitor(deviceId, activo) {
 
   if (currentMonitorData?.state) {
     currentMonitorData.state.isWatering = activo;
-    actualizarBotonRiego(currentMonitorData.state, currentMonitorData.garden_plant?.plant_type_id?.ideal || null, deviceId);
+    actualizarBotonRiego(
+      currentMonitorData.state,
+      currentMonitorData.garden_plant?.plant_type_id?.ideal || null,
+      deviceId,
+      deviceSnapshot[deviceId]?.status || currentMonitorData.device_status || 'offline'
+    );
   }
 }
 
@@ -816,11 +855,20 @@ function actualizarEstadoMonitorDesdeDispositivos() {
   if (!currentMonitorPlant) return;
 
   const device = deviceSnapshot[currentMonitorPlant.device_id];
-  if (!device) return;
+  if (!device) {
+    actualizarEstadoConexionMonitor(
+      currentMonitorData?.device_status || (currentMonitorPlant?.device_id ? 'offline' : 'unassigned'),
+      currentMonitorPlant?.device_id || null
+    );
+    return;
+  }
 
   if (currentMonitorData?.state) {
     currentMonitorData.state.isWatering = Boolean(device.status === 'online' && device.lastReading && device.lastReading.humidity < (currentMonitorData.garden_plant?.plant_type_id?.ideal?.humidity?.min || 0));
   }
+
+  currentMonitorData.device_status = device.status;
+  actualizarEstadoConexionMonitor(device.status, currentMonitorPlant.device_id);
 }
 
 function manejarDispositivosPendientes() {
@@ -918,13 +966,40 @@ async function asignarPlantaADevice(deviceId, gardenPlantId) {
       garden_plant_id: gardenPlantId
     });
 
+    gardenCache = gardenCache.map((planta) => (
+      planta._id === gardenPlantId
+        ? { ...planta, device_id: deviceId }
+        : planta
+    ));
+    sincronizarJardinConDispositivos();
+    renderizarJardinDesdeCache();
+    actualizarContadoresDelCatalogo();
+
     cerrarDialogoAsignacion();
     pendingAssignmentShown = false;
     pendingDeviceId = null;
-    await cargarJardin();
+
+    if (currentMonitorPlant && currentMonitorPlant._id === gardenPlantId) {
+      currentMonitorPlant = { ...currentMonitorPlant, device_id: deviceId };
+    }
   } catch (error) {
     console.error('Error al asignar planta:', error);
   }
+}
+
+function actualizarEstadoConexionMonitor(status, deviceId) {
+  const livePill = document.querySelector('.live-pill');
+  if (!livePill) return;
+
+  livePill.dataset.status = status || 'unassigned';
+  livePill.innerHTML = `<span class="live-pill-dot"></span>${obtenerEtiquetaEstado(status, deviceId)}`;
+}
+
+function obtenerEtiquetaEstado(status, deviceId) {
+  if (!deviceId) return 'Sin módulo';
+  if (status === 'offline') return 'Offline';
+  if (status === 'pending') return 'Pendiente';
+  return 'En vivo';
 }
 
 function mostrarMonitorNoEncontrado(mensaje) {
@@ -943,21 +1018,8 @@ function pushHistory(history, value) {
   return next;
 }
 
-function abreviarInstanceId(instanceId) {
-  if (!instanceId) return 'SIN-ID';
-  return instanceId.length > 22 ? `${instanceId.slice(0, 10)}…${instanceId.slice(-8)}` : instanceId;
-}
-
 function limitar(valor, minimo, maximo) {
   return Math.max(minimo, Math.min(maximo, valor));
-}
-
-function normalizarTexto(texto) {
-  return String(texto || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
 }
 
 function mostrarToast(mensaje) {

@@ -185,11 +185,21 @@ app.delete('/api/garden/:gardenPlantId', authMiddleware, async (req, res) => {
     }
 
     if (gardenPlant.device_id) {
-      devices.delete(gardenPlant.device_id);
       await Device.findOneAndUpdate(
         { device_id: gardenPlant.device_id },
-        { $set: { user_id: null, plant_type: null, status: 'pending', last_seen: null } }
+        { $set: { user_id: null, plant_type: null, status: 'pending', last_seen: new Date() } }
       );
+
+      devices.set(gardenPlant.device_id, {
+        user_id: null,
+        plant_type: null,
+        ideal: null,
+        status: 'pending',
+        lastReading: null,
+        last_seen: Date.now(),
+        garden_plant_id: null
+      });
+
       broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
     }
 
@@ -214,13 +224,16 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
 
     const plantType = gardenPlant.plant_type_id;
     const deviceID = gardenPlant.device_id;
+    const liveDevice = deviceID ? devices.get(deviceID) : null;
 
     if (!deviceID) {
       return res.json({
         garden_plant: serializarGardenPlant(gardenPlant),
         device_id: null,
+        device_status: 'unassigned',
         window: windowInfo.window,
         telemetry: crearTelemetriaVacia(windowInfo, 12),
+        health: { status: 'desconocido', issues: [], needsWatering: false },
         recommendations: plantType?.ideal || null
       });
     }
@@ -231,15 +244,19 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
       timestamp: { $gte: windowInfo.from }
     }).sort({ timestamp: 1 }).lean();
 
+    const latestReading = readings[readings.length - 1] || null;
     const telemetry = readings.length > 0
       ? construirTelemetria(readings)
       : crearTelemetriaVacia(windowInfo, 12);
+    const health = evaluateHealth(plantType?.ideal, latestReading || {});
 
     res.json({
       garden_plant: serializarGardenPlant(gardenPlant),
       device_id: deviceID,
+      device_status: liveDevice?.status || 'offline',
       window: windowInfo.window,
       telemetry,
+      health,
       recommendations: plantType?.ideal || null
     });
   } catch (err) {
@@ -428,27 +445,36 @@ async function handleDeviceRegister(payload) {
   const { device_id, plant_type, status } = payload;
 
   try {
+    const assignedGardenPlant = await GardenPlant.findOne({ device_id }).populate('plant_type_id');
+    const assignedPlantType = assignedGardenPlant?.plant_type_id || null;
+    const resolvedStatus = assignedGardenPlant ? 'online' : (status || 'pending');
+
     // Actualiza o crea el documento en MongoDB (upsert)
     await Device.findOneAndUpdate(
       { device_id },
-      { user_id: null, plant_type, status: status || 'pending', last_seen: new Date() },
+      {
+        user_id: assignedGardenPlant?.user_id || null,
+        plant_type: assignedPlantType?.name || plant_type || null,
+        status: resolvedStatus,
+        last_seen: new Date()
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    // Carga las condiciones ideales de esa planta desde MongoDB
-    const plantType = await PlantType.findOne({ name: plant_type });
+    const plantType = assignedPlantType || await PlantType.findOne({ name: plant_type });
 
     // Guarda en el mapa en memoria para acceso rápido
     devices.set(device_id, {
-      user_id: null,
-      plant_type,
+      user_id: assignedGardenPlant?.user_id || null,
+      plant_type: plantType?.name || plant_type || null,
       ideal:   plantType?.ideal ?? null,
-      status,
+      status: resolvedStatus,
       lastReading: null,
-      last_seen: Date.now()
+      last_seen: Date.now(),
+      garden_plant_id: assignedGardenPlant?._id ? assignedGardenPlant._id.toString() : null
     });
 
-    console.log(`📋 Dispositivo detectado: ${device_id} → ${plant_type}`);
+    console.log(`📋 Dispositivo detectado: ${device_id} → ${plantType?.name || plant_type || 'pending'}`);
 
     // Notifica al dashboard
     broadcastToClients({
