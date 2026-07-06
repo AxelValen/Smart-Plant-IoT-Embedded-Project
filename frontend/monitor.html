@@ -60,7 +60,15 @@
           <p class="section-eyebrow">Lecturas actuales</p>
           <h2>Condiciones del suelo</h2>
         </div>
-        <p>Pasa el cursor o toca una medición para ver su histórico particular.</p>
+        <label class="window-selector" for="monitorWindowSelect">
+          Eliga la ventana de monitoreo. Pasa el cursor por una medición para ver su historial.
+          <select id="monitorWindowSelect">
+            <option value="1h">1 hora</option>
+            <option value="24h" selected>24 horas</option>
+            <option value="1w">1 semana</option>
+            <option value="1m">1 mes</option>
+          </select>
+        </label>
       </div>
 
       <div class="sensor-grid">
@@ -126,8 +134,13 @@
         </div>
 
         <div class="recommendations-card">
-          <p class="section-eyebrow">Cuidado de la planta</p>
-          <h2>Recomendaciones</h2>
+          <div class="recommendations-header">
+            <div>
+              <p class="section-eyebrow">Cuidado de la planta</p>
+              <h2>Recomendaciones</h2>
+            </div>
+            
+          </div>
           <div class="recommendations-placeholder" id="recommendationsSpace">
             Espacio de recomendaciones
           </div>

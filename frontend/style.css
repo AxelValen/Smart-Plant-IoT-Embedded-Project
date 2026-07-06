@@ -1394,6 +1394,32 @@ footer {
   font-size: clamp(1.5rem, 3vw, 2rem);
 }
 
+.recommendations-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.window-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.window-selector select {
+  min-width: 9rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid rgba(92, 64, 51, 0.18);
+  border-radius: 14px;
+  background: var(--blanco);
+  color: var(--texto);
+  font: inherit;
+}
+
 .watering-control-card > p:not(.section-eyebrow) {
   margin: 0 0 1.35rem;
   color: var(--muted);
@@ -1427,9 +1453,6 @@ footer {
 .recommendations-placeholder {
   min-height: 115px;
   padding: 1.2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   background: var(--crema);
   border: 2px dashed #d6cbbb;
   border-radius: 14px;
@@ -1439,8 +1462,82 @@ footer {
   text-align: center;
 }
 
+.recommendations-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.9rem;
+  text-align: left;
+}
+
+.status-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1rem;
+  border: 1px solid transparent;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.status-card-label {
+  color: var(--muted);
+  font-family: "Space Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.status-card strong {
+  font-size: 1.15rem;
+}
+
+.status-card-ok {
+  border-color: rgba(74, 124, 89, 0.32);
+  background: rgba(74, 124, 89, 0.08);
+}
+
+.status-card-ok strong,
+.status-card-ok p,
+.status-card-ok li {
+  color: #245437;
+}
+
+.status-card-bad {
+  border-color: rgba(184, 63, 63, 0.28);
+  background: rgba(184, 63, 63, 0.08);
+}
+
+.status-card-bad strong,
+.status-card-bad p,
+.status-card-bad li {
+  color: #8d2626;
+}
+
+.status-card-ideal {
+  border-color: rgba(94, 94, 59, 0.24);
+  background: rgba(232, 220, 200, 0.7);
+}
+
+.recommendations-issues {
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.recommendations-issues li + li {
+  margin-top: 0.25rem;
+}
+
 @media (max-width: 700px) {
   .plant-care-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .recommendations-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .recommendations-grid {
     grid-template-columns: 1fr;
   }
 }
