@@ -9,6 +9,8 @@ let currentMonitorPlant = null;
 let currentMonitorData = null;
 let tooltipMetricKey = null;
 let tooltipListenersBound = false;
+let monitorRefreshTimer = null;
+let monitorWindowKey = '24h';
 
 window.logout = logout;
 
@@ -488,18 +490,32 @@ async function inicializarMonitorDePlanta() {
   const boton = document.getElementById('wateringButton');
   boton?.addEventListener('click', manejarClickRiego);
 
+  const selector = document.getElementById('monitorWindowSelect');
+  const queryWindow = new URLSearchParams(window.location.search).get('window');
+  if (selector) {
+    monitorWindowKey = queryWindow || selector.value || '24h';
+    selector.value = monitorWindowKey;
+    selector.addEventListener('change', async (event) => {
+      monitorWindowKey = event.target.value;
+      await refrescarMonitorActivo(true);
+    });
+  } else if (queryWindow) {
+    monitorWindowKey = queryWindow;
+  }
+
   await cargarMonitorDesdeAPIPlaceholder(instanceId);
+  iniciarRefrescoDelMonitor();
 }
 
 async function cargarMonitorDesdeAPIPlaceholder(instanceId) {
   const planta = gardenCache.find((item) => item._id === instanceId);
   if (planta) {
-    await cargarMonitorDesdeAPI(planta, new URLSearchParams(window.location.search).get('window') || '1h');
+    await cargarMonitorDesdeAPI(planta, monitorWindowKey);
     return;
   }
 
   try {
-    const response = await apiFetch(`/api/monitor/${encodeURIComponent(instanceId)}?window=${encodeURIComponent(new URLSearchParams(window.location.search).get('window') || '1h')}`);
+    const response = await apiFetch(`/api/monitor/${encodeURIComponent(instanceId)}?window=${encodeURIComponent(monitorWindowKey)}`);
     currentMonitorData = response;
     currentMonitorPlant = response.garden_plant || null;
     renderizarMonitor(response);
@@ -514,6 +530,7 @@ async function cargarMonitorDesdeAPI(planta, windowKey) {
     const response = await apiFetch(`/api/monitor/${encodeURIComponent(planta._id)}?window=${encodeURIComponent(windowKey)}`);
     currentMonitorData = response;
     currentMonitorPlant = response.garden_plant || planta;
+    monitorWindowKey = windowKey || monitorWindowKey;
     renderizarMonitor(response);
   } catch (error) {
     console.error('Error al cargar monitor:', error);
@@ -531,6 +548,7 @@ function renderizarMonitor(data) {
   const health = data.health || { status: 'desconocido', issues: [], needsWatering: false };
   const deviceId = gardenPlant?.device_id || null;
   const deviceStatus = data.device_status || (deviceId ? (deviceSnapshot[deviceId]?.status || 'offline') : 'unassigned');
+  const isWatering = data.isWatering ?? currentMonitorData?.isWatering ?? false;
 
   document.getElementById('monitorPlantOverview')?.removeAttribute('hidden');
   document.getElementById('monitorContent')?.removeAttribute('hidden');
@@ -555,11 +573,13 @@ function renderizarMonitor(data) {
   }
 
   const state = convertirTelemetriaAEstado(telemetry, plantType.ideal);
+  state.isWatering = isWatering;
   currentMonitorData = {
     ...data,
     telemetry,
     state,
-    health
+    health,
+    isWatering
   };
 
   renderizarTodosLosSensores(state);
@@ -750,19 +770,31 @@ function renderizarRecomendaciones(ideal, health) {
   }
 
   const issues = Array.isArray(health?.issues) ? health.issues : [];
-  const issuesHtml = issues.length > 0
-    ? `<ul class="recommendations-issues">${issues.map((issue) => `<li>${issue}</li>`).join('')}</ul>`
-    : '<p class="recommendations-ok">Sin alertas activas. La planta está dentro de rango.</p>';
+  const saludOk = health?.status === 'saludable' && issues.length === 0;
+  const saludClass = saludOk ? 'status-card status-card-ok' : 'status-card status-card-bad';
+  const alertasClass = issues.length === 0 ? 'status-card status-card-ok' : 'status-card status-card-bad';
 
   contenedor.innerHTML = `
-    <p class="recommendations-health">Estado: ${health?.status || 'desconocido'}</p>
-    ${issuesHtml}
-    <div class="recommendations-thresholds">
-      <p>Humedad óptima: ${ideal.humidity.min}% - ${ideal.humidity.max}%</p>
-      <p>Temperatura óptima: ${ideal.temperature.min}°C - ${ideal.temperature.max}°C</p>
-      <p>Nitrógeno: ${ideal.nitrogeno.min} - ${ideal.nitrogeno.max}</p>
-      <p>Fósforo: ${ideal.fosforo.min} - ${ideal.fosforo.max}</p>
-      <p>Potasio: ${ideal.potasio.min} - ${ideal.potasio.max}</p>
+    <div class="recommendations-grid">
+      <div class="${saludClass}">
+        <span class="status-card-label">Estado de salud</span>
+        <strong>${health?.status || 'desconocido'}</strong>
+        <p>${saludOk ? 'La planta está estable.' : 'La planta necesita atención.'}</p>
+      </div>
+      <div class="${alertasClass}">
+        <span class="status-card-label">Alertas</span>
+        ${issues.length > 0
+          ? `<ul class="recommendations-issues">${issues.map((issue) => `<li>${issue}</li>`).join('')}</ul>`
+          : '<p>Sin alertas activas.</p>'}
+      </div>
+      <div class="status-card status-card-ideal">
+        <span class="status-card-label">Condiciones ideales</span>
+        <p>Humedad: ${ideal.humidity.min}% - ${ideal.humidity.max}%</p>
+        <p>Temperatura: ${ideal.temperature.min}°C - ${ideal.temperature.max}°C</p>
+        <p>Nitrógeno: ${ideal.nitrogeno.min} - ${ideal.nitrogeno.max}</p>
+        <p>Fósforo: ${ideal.fosforo.min} - ${ideal.fosforo.max}</p>
+        <p>Potasio: ${ideal.potasio.min} - ${ideal.potasio.max}</p>
+      </div>
     </div>
   `;
 }
@@ -771,14 +803,12 @@ function actualizarBotonRiego(state, ideal, deviceId, deviceStatus) {
   const boton = document.getElementById('wateringButton');
   if (!boton) return;
 
-  const humedadMinima = ideal?.humidity?.min ?? 0;
-  const puedeActivar = Boolean(deviceId) && deviceStatus === 'online' && !state.isWatering && state.latestHumidity < humedadMinima;
+  const puedeActivar = Boolean(deviceId) && deviceStatus === 'online' && !state.isWatering;
 
   boton.disabled = !state.isWatering && !puedeActivar;
   boton.textContent = state.isWatering ? '💧 Detener riego' : '💧 Activar riego';
   boton.dataset.deviceId = deviceId || '';
   boton.dataset.deviceStatus = deviceStatus || 'unassigned';
-  boton.dataset.humidityMin = String(humedadMinima);
 }
 
 function manejarClickRiego() {
@@ -789,6 +819,7 @@ function manejarClickRiego() {
   const ideal = currentMonitorData.garden_plant?.plant_type_id?.ideal || null;
   const state = currentMonitorData.state || {};
   const deviceStatus = boton.dataset.deviceStatus || currentMonitorData.device_status || 'unassigned';
+  const isWatering = Boolean(currentMonitorData.isWatering);
 
   if (!deviceId) {
     mostrarToast('No hay un módulo asignado para regar.');
@@ -800,21 +831,17 @@ function manejarClickRiego() {
     return;
   }
 
-  if (state.isWatering) {
+  if (isWatering) {
     enviarComandoWS('LED_OFF', { device_id: deviceId });
     state.isWatering = false;
+    currentMonitorData.isWatering = false;
     actualizarBotonRiego(state, ideal, deviceId, deviceStatus);
-    return;
-  }
-
-  const humedadMinima = ideal?.humidity?.min ?? 0;
-  if (state.latestHumidity >= humedadMinima) {
-    mostrarToast('La humedad todavía no está por debajo del umbral recomendado.');
     return;
   }
 
   enviarComandoWS('LED_ON', { device_id: deviceId });
   state.isWatering = true;
+  currentMonitorData.isWatering = true;
   actualizarBotonRiego(state, ideal, deviceId, deviceStatus);
 }
 
@@ -832,7 +859,7 @@ function actualizarMonitorEnVivo(data) {
   currentMonitorData.device_status = deviceSnapshot[data.device_id]?.status || currentMonitorData.device_status || 'online';
   currentMonitorData.health = currentMonitorData.health || { status: 'desconocido', issues: [], needsWatering: false };
   currentMonitorData.state = convertirTelemetriaAEstado(telemetry, currentMonitorData.garden_plant?.plant_type_id?.ideal || null);
-  currentMonitorData.state.isWatering = currentMonitorData.state.isWatering || false;
+  currentMonitorData.state.isWatering = Boolean(currentMonitorData.isWatering);
 
   renderizarMonitor(currentMonitorData);
 }
@@ -842,6 +869,7 @@ function marcarRiegoEnMonitor(deviceId, activo) {
 
   if (currentMonitorData?.state) {
     currentMonitorData.state.isWatering = activo;
+    currentMonitorData.isWatering = activo;
     actualizarBotonRiego(
       currentMonitorData.state,
       currentMonitorData.garden_plant?.plant_type_id?.ideal || null,
@@ -1036,4 +1064,34 @@ function mostrarToast(mensaje) {
   toast.classList.add('visible');
   window.clearTimeout(mostrarToast.temporizador);
   mostrarToast.temporizador = window.setTimeout(() => toast.classList.remove('visible'), 2400);
+}
+
+function iniciarRefrescoDelMonitor() {
+  if (monitorRefreshTimer) return;
+
+  monitorRefreshTimer = window.setInterval(() => {
+    refrescarMonitorActivo(false).catch((error) => {
+      console.error('Error al refrescar monitor:', error);
+    });
+  }, 10000);
+}
+
+async function refrescarMonitorActivo(forceToast) {
+  const instanceId = currentMonitorPlant?._id || new URLSearchParams(window.location.search).get('plant');
+  if (!instanceId) return;
+
+  try {
+    const response = await apiFetch(`/api/monitor/${encodeURIComponent(instanceId)}?window=${encodeURIComponent(monitorWindowKey)}`);
+    const isWatering = currentMonitorData?.isWatering ?? false;
+    currentMonitorData = {
+      ...response,
+      isWatering
+    };
+    currentMonitorPlant = response.garden_plant || currentMonitorPlant;
+    renderizarMonitor(currentMonitorData);
+  } catch (error) {
+    if (forceToast) {
+      mostrarToast('No se pudo actualizar la ventana de tiempo.');
+    }
+  }
 }
