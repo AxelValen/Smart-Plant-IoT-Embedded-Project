@@ -13,7 +13,7 @@ const deviceSchema = new mongoose.Schema({
   user_id: {
     type:     mongoose.Schema.Types.ObjectId,
     ref:      'User',
-    required: true,
+    default:  null,
     index:    true
   },
 
@@ -34,8 +34,8 @@ const deviceSchema = new mongoose.Schema({
   // Estado de conexión actual
   status: {
     type:    String,
-    enum:    ['online', 'offline'],
-    default: 'offline'
+    enum:    ['pending', 'online', 'offline'],
+    default: 'pending'
   },
 
   // Última vez que se recibió señal de este dispositivo

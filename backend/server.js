@@ -3,6 +3,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const frontendPath = path.join(__dirname, '../frontend');
 
 const mongoose = require('mongoose');
+const GardenPlant   = require('./models/GardenPlant');
 const Device        = require('./models/Device');
 const SensorReading = require('./models/SensorReading');
 const WateringEvent = require('./models/WateringEvent');
@@ -107,6 +108,146 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
   }
 });
 
+// ================================================================
+//  CRUD DEL JARDÍN
+// ================================================================
+
+app.get('/api/garden', authMiddleware, async (req, res) => {
+  try {
+    const garden = await GardenPlant.find({ user_id: req.user_id })
+      .populate('plant_type_id')
+      .sort({ createdAt: 1 });
+
+    res.json({ garden: garden.map(serializarGardenPlant) });
+  } catch (err) {
+    console.error('❌ Error al obtener jardín:', err.message);
+    res.status(500).json({ error: 'Error al obtener el jardín' });
+  }
+});
+
+app.post('/api/garden', authMiddleware, async (req, res) => {
+  try {
+    const {
+      plant_type_id,
+      plant_type_name,
+      plant_type_key,
+      plant_type,
+      display_name,
+      model_src
+    } = req.body;
+
+    let plantType = await resolverPlantType(
+      plant_type_id || plant_type_key || plant_type_name || display_name
+    );
+
+    if (!plantType) {
+      const catalogKey = normalizeCatalogKey(plant_type_key || plant_type_name || display_name || 'planta');
+      const catalogName = String(plant_type_name || display_name || plant_type || plant_type_key || 'Planta').trim();
+
+      plantType = await PlantType.findOneAndUpdate(
+        { name: catalogKey },
+        {
+          $setOnInsert: {
+            name: catalogKey,
+            display_name: catalogName,
+            description: `Autogenerado desde el catálogo web: ${catalogName}`,
+            ideal: inferIdealForCatalog(catalogName)
+          }
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    }
+
+    const gardenPlant = await GardenPlant.create({
+      user_id: req.user_id,
+      plant_type_id: plantType._id,
+      model_src: model_src || null,
+      device_id: null
+    });
+
+    const populated = await GardenPlant.findById(gardenPlant._id).populate('plant_type_id');
+    res.status(201).json({ garden_plant: serializarGardenPlant(populated) });
+  } catch (err) {
+    console.error('❌ Error al crear planta del jardín:', err.message);
+    res.status(500).json({ error: 'Error al crear la planta del jardín' });
+  }
+});
+
+app.delete('/api/garden/:gardenPlantId', authMiddleware, async (req, res) => {
+  try {
+    const gardenPlant = await GardenPlant.findOneAndDelete({
+      _id: req.params.gardenPlantId,
+      user_id: req.user_id
+    }).populate('plant_type_id');
+
+    if (!gardenPlant) {
+      return res.status(404).json({ error: 'La planta no existe' });
+    }
+
+    if (gardenPlant.device_id) {
+      devices.delete(gardenPlant.device_id);
+      await Device.findOneAndUpdate(
+        { device_id: gardenPlant.device_id },
+        { $set: { user_id: null, plant_type: null, status: 'pending', last_seen: null } }
+      );
+      broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
+    }
+
+    res.json({ garden_plant: serializarGardenPlant(gardenPlant) });
+  } catch (err) {
+    console.error('❌ Error al eliminar planta del jardín:', err.message);
+    res.status(500).json({ error: 'Error al eliminar la planta' });
+  }
+});
+
+app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
+  try {
+    const windowInfo = obtenerVentanaDeHistorial(req.query.window);
+    const gardenPlant = await GardenPlant.findOne({
+      _id: req.params.instance_id,
+      user_id: req.user_id
+    }).populate('plant_type_id');
+
+    if (!gardenPlant) {
+      return res.status(404).json({ error: 'La planta no existe' });
+    }
+
+    const plantType = gardenPlant.plant_type_id;
+    const deviceID = gardenPlant.device_id;
+
+    if (!deviceID) {
+      return res.json({
+        garden_plant: serializarGardenPlant(gardenPlant),
+        device_id: null,
+        window: windowInfo.window,
+        telemetry: crearTelemetriaVacia(windowInfo, 12),
+        recommendations: plantType?.ideal || null
+      });
+    }
+
+    const readings = await SensorReading.find({
+      user_id: req.user_id,
+      device_id: deviceID,
+      timestamp: { $gte: windowInfo.from }
+    }).sort({ timestamp: 1 }).lean();
+
+    const telemetry = readings.length > 0
+      ? construirTelemetria(readings)
+      : crearTelemetriaVacia(windowInfo, 12);
+
+    res.json({
+      garden_plant: serializarGardenPlant(gardenPlant),
+      device_id: deviceID,
+      window: windowInfo.window,
+      telemetry,
+      recommendations: plantType?.ideal || null
+    });
+  } catch (err) {
+    console.error('❌ Error al obtener monitor:', err.message);
+    res.status(500).json({ error: 'Error al obtener el monitor' });
+  }
+});
+
 // --- Conexión al broker MQTT ---
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {
   username: process.env.MQTT_USERNAME,
@@ -136,28 +277,65 @@ wss.on('connection', (ws) => {
       const data = JSON.parse(message.toString());
       const cmd = data.command;
       const deviceID = data.device_id;
+      const userID = obtenerUserIdDesdeToken(data.token);
       
       // --- NUEVA LÓGICA DE ASIGNACIÓN ---
       if (cmd === 'ASSIGN_PLANT') {
-        const selectedPlant = data.plant_type;
-        
-        // Actualiza en MongoDB
-        await Device.findOneAndUpdate(
-          { device_id: deviceID },
-          { plant_type: selectedPlant, status: 'online' },
-          { new: true }
+        const selectedGardenPlantId = data.garden_plant_id;
+
+        if (!deviceID) {
+          ws.send(JSON.stringify({ type: 'error', message: 'No se recibió el ID del dispositivo' }));
+          return;
+        }
+
+        if (!userID) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Token inválido o expirado' }));
+          return;
+        }
+
+        const selectedPlant = await GardenPlant.findOne({
+          _id: selectedGardenPlantId,
+          user_id: userID
+        }).populate('plant_type_id');
+
+        if (!selectedPlant) {
+          ws.send(JSON.stringify({ type: 'error', message: 'La planta seleccionada no existe' }));
+          return;
+        }
+
+        const plantInfo = selectedPlant.plant_type_id;
+
+        await GardenPlant.updateMany(
+          { user_id: userID, device_id: deviceID, _id: { $ne: selectedPlant._id } },
+          { $set: { device_id: null } }
         );
 
-        // Carga las condiciones ideales de la BD y actualiza el mapa en memoria
-        const plantInfo = await PlantType.findOne({ name: selectedPlant });
-        devices.set(deviceID, {
-          plant_type: selectedPlant,
-          ideal: plantInfo ? plantInfo.ideal : null,
-          status: 'online',
-          lastReading: null
+        await GardenPlant.findByIdAndUpdate(selectedPlant._id, {
+          device_id: deviceID
         });
 
-        console.log(`✅ Dispositivo ${deviceID} asignado a: ${selectedPlant}`);
+        await Device.findOneAndUpdate(
+          { device_id: deviceID },
+          {
+            user_id: userID,
+            plant_type: plantInfo?.name || null,
+            status: 'online',
+            last_seen: new Date()
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+
+        devices.set(deviceID, {
+          user_id: userID,
+          plant_type: plantInfo?.name || null,
+          ideal: plantInfo ? plantInfo.ideal : null,
+          status: 'online',
+          lastReading: null,
+          garden_plant_id: selectedPlant._id.toString(),
+          last_seen: Date.now()
+        });
+
+        console.log(`✅ Dispositivo ${deviceID} asignado a: ${plantInfo?.display_name || plantInfo?.name || 'planta'}`);
         
         // Notifica a todos los clientes que la lista de dispositivos cambió
         broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
@@ -253,8 +431,8 @@ async function handleDeviceRegister(payload) {
     // Actualiza o crea el documento en MongoDB (upsert)
     await Device.findOneAndUpdate(
       { device_id },
-      { plant_type, status, last_seen: new Date() },
-      { upsert: true, new: true }
+      { user_id: null, plant_type, status: status || 'pending', last_seen: new Date() },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
     // Carga las condiciones ideales de esa planta desde MongoDB
@@ -262,10 +440,12 @@ async function handleDeviceRegister(payload) {
 
     // Guarda en el mapa en memoria para acceso rápido
     devices.set(device_id, {
+      user_id: null,
       plant_type,
       ideal:   plantType?.ideal ?? null,
       status,
-      lastReading: null
+      lastReading: null,
+      last_seen: Date.now()
     });
 
     console.log(`📋 Dispositivo detectado: ${device_id} → ${plant_type}`);
@@ -286,11 +466,29 @@ async function handleSensorData(deviceID, payload) {
   try {
     const device = devices.get(deviceID);
 
+    if (device) {
+      device.lastReading = payload;
+      device.last_seen = Date.now();
+    }
+
+    if (!device?.user_id) {
+      broadcastToClients({
+        type:       'sensor_data',
+        device_id:  deviceID,
+        plant_type: device?.plant_type,
+        ...payload,
+        health:     { status: 'desconocido', issues: [], needsWatering: false },
+        timestamp:  new Date().toISOString()
+      });
+      return;
+    }
+
     // Evalúa la salud de la planta comparando con condiciones ideales
     const healthResult = evaluateHealth(device?.ideal, payload);
 
     // ── Guarda la lectura en MongoDB ─────────────────────────────
     await SensorReading.create({
+      user_id:         device.user_id,
       device_id:       deviceID,
       plant_type:      device?.plant_type,
       humidity:        payload.humidity,
@@ -463,8 +661,228 @@ async function stopWatering(deviceID, device, reading, healthResult) {
 
 function getDevicesSnapshot() {
   const snapshot = {};
-  devices.forEach((info, id) => { snapshot[id] = info; });
+  devices.forEach((info, id) => {
+    snapshot[id] = { device_id: id, ...info };
+  });
   return snapshot;
+}
+
+function serializarGardenPlant(gardenPlant) {
+  if (!gardenPlant) return null;
+  return typeof gardenPlant.toObject === 'function' ? gardenPlant.toObject() : gardenPlant;
+}
+
+function normalizeCatalogKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+async function resolverPlantType(reference) {
+  if (!reference) return null;
+
+  if (mongoose.Types.ObjectId.isValid(reference)) {
+    const byId = await PlantType.findById(reference);
+    if (byId) return byId;
+  }
+
+  const normalizedReference = normalizeCatalogKey(reference);
+  const plantTypes = await PlantType.find({});
+
+  return plantTypes.find((plantType) => {
+    const nameKey = normalizeCatalogKey(plantType.name);
+    const displayKey = normalizeCatalogKey(plantType.display_name);
+    return nameKey === normalizedReference || displayKey === normalizedReference;
+  }) || null;
+}
+
+function inferIdealForCatalog(catalogLabel) {
+  const normalized = normalizeCatalogKey(catalogLabel);
+
+  const defaults = {
+    humidity: { min: 30, max: 80 },
+    temperature: { min: 18, max: 30 },
+    nitrogeno: { min: 35, max: 120 },
+    fosforo: { min: 35, max: 120 },
+    potasio: { min: 35, max: 120 }
+  };
+
+  const catalogPresets = {
+    cactus: {
+      humidity: { min: 10, max: 35 },
+      temperature: { min: 18, max: 35 },
+      nitrogeno: { min: 20, max: 90 },
+      fosforo: { min: 20, max: 90 },
+      potasio: { min: 20, max: 90 }
+    },
+    suculenta: {
+      humidity: { min: 15, max: 45 },
+      temperature: { min: 18, max: 32 },
+      nitrogeno: { min: 20, max: 90 },
+      fosforo: { min: 20, max: 90 },
+      potasio: { min: 20, max: 90 }
+    },
+    semi_suculenta: {
+      humidity: { min: 20, max: 50 },
+      temperature: { min: 18, max: 32 },
+      nitrogeno: { min: 20, max: 90 },
+      fosforo: { min: 20, max: 90 },
+      potasio: { min: 20, max: 90 }
+    },
+    ornamental_de_follaje: {
+      humidity: { min: 45, max: 75 },
+      temperature: { min: 18, max: 28 },
+      nitrogeno: { min: 35, max: 110 },
+      fosforo: { min: 35, max: 110 },
+      potasio: { min: 35, max: 110 }
+    },
+    ornamental_floral: {
+      humidity: { min: 45, max: 75 },
+      temperature: { min: 16, max: 28 },
+      nitrogeno: { min: 35, max: 110 },
+      fosforo: { min: 35, max: 110 },
+      potasio: { min: 35, max: 110 }
+    },
+    hortaliza_de_fruto: {
+      humidity: { min: 55, max: 80 },
+      temperature: { min: 18, max: 28 },
+      nitrogeno: { min: 45, max: 120 },
+      fosforo: { min: 45, max: 120 },
+      potasio: { min: 45, max: 120 }
+    },
+    hortaliza_de_hoja: {
+      humidity: { min: 65, max: 90 },
+      temperature: { min: 15, max: 24 },
+      nitrogeno: { min: 45, max: 120 },
+      fosforo: { min: 45, max: 120 },
+      potasio: { min: 45, max: 120 }
+    },
+    bulbo: {
+      humidity: { min: 45, max: 70 },
+      temperature: { min: 12, max: 24 },
+      nitrogeno: { min: 35, max: 100 },
+      fosforo: { min: 35, max: 100 },
+      potasio: { min: 35, max: 100 }
+    },
+    raiz_comestible: {
+      humidity: { min: 55, max: 80 },
+      temperature: { min: 14, max: 24 },
+      nitrogeno: { min: 35, max: 110 },
+      fosforo: { min: 35, max: 110 },
+      potasio: { min: 35, max: 110 }
+    },
+    frutal_arboreo: {
+      humidity: { min: 50, max: 80 },
+      temperature: { min: 18, max: 30 },
+      nitrogeno: { min: 40, max: 120 },
+      fosforo: { min: 40, max: 120 },
+      potasio: { min: 40, max: 120 }
+    },
+    frutal_herbaceo: {
+      humidity: { min: 60, max: 85 },
+      temperature: { min: 15, max: 28 },
+      nitrogeno: { min: 40, max: 120 },
+      fosforo: { min: 40, max: 120 },
+      potasio: { min: 40, max: 120 }
+    },
+    frutal_trepador: {
+      humidity: { min: 55, max: 80 },
+      temperature: { min: 18, max: 30 },
+      nitrogeno: { min: 40, max: 120 },
+      fosforo: { min: 40, max: 120 },
+      potasio: { min: 40, max: 120 }
+    }
+  };
+
+  return catalogPresets[normalized] || defaults;
+}
+
+function obtenerVentanaDeHistorial(windowParam) {
+  const windowKey = ['1h', '24h', '1w', '1m'].includes(String(windowParam)) ? String(windowParam) : '1h';
+  const ranges = {
+    '1h': { hours: 1, points: 12 },
+    '24h': { hours: 24, points: 24 },
+    '1w': { days: 7, points: 28 },
+    '1m': { days: 30, points: 30 }
+  };
+
+  const config = ranges[windowKey];
+  const to = new Date();
+  const from = new Date(to);
+
+  if (config.hours) from.setHours(from.getHours() - config.hours);
+  if (config.days) from.setDate(from.getDate() - config.days);
+
+  return { window: windowKey, from, to, points: config.points };
+}
+
+function crearTelemetriaVacia(windowInfo, sampleCount) {
+  const timestamps = crearMarcaDeTiempoVentana(windowInfo.from, windowInfo.to, sampleCount);
+  return {
+    timestamps,
+    humidity: Array(sampleCount).fill(0),
+    temperature: Array(sampleCount).fill(0),
+    nitrogeno: Array(sampleCount).fill(0),
+    fosforo: Array(sampleCount).fill(0),
+    potasio: Array(sampleCount).fill(0),
+    latest: {
+      humidity: 0,
+      temperature: 0,
+      nitrogeno: 0,
+      fosforo: 0,
+      potasio: 0
+    }
+  };
+}
+
+function construirTelemetria(readings) {
+  const latest = readings[readings.length - 1] || {};
+  return {
+    timestamps: readings.map(reading => reading.timestamp),
+    humidity: readings.map(reading => reading.humidity ?? 0),
+    temperature: readings.map(reading => reading.temperature ?? 0),
+    nitrogeno: readings.map(reading => reading.nitrogeno ?? 0),
+    fosforo: readings.map(reading => reading.fosforo ?? 0),
+    potasio: readings.map(reading => reading.potasio ?? 0),
+    latest: {
+      humidity: latest.humidity ?? 0,
+      temperature: latest.temperature ?? 0,
+      nitrogeno: latest.nitrogeno ?? 0,
+      fosforo: latest.fosforo ?? 0,
+      potasio: latest.potasio ?? 0
+    }
+  };
+}
+
+function crearMarcaDeTiempoVentana(from, to, sampleCount) {
+  if (sampleCount <= 1) {
+    return [to.toISOString()];
+  }
+
+  const points = [];
+  const span = to.getTime() - from.getTime();
+
+  for (let index = 0; index < sampleCount; index += 1) {
+    const ratio = index / (sampleCount - 1);
+    points.push(new Date(from.getTime() + span * ratio).toISOString());
+  }
+
+  return points;
+}
+
+function obtenerUserIdDesdeToken(token) {
+  if (!token) return null;
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    return decoded.user_id || null;
+  } catch (err) {
+    return null;
+  }
 }
 
 function broadcastToClients(data) {

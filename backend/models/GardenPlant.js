@@ -30,6 +30,13 @@ const gardenPlantSchema = new mongoose.Schema({
     type:    String,
     trim:    true,
     default: null
+  },
+
+  // Ruta del modelo 3D usada por el frontend para el renderizado
+  model_src: {
+    type:    String,
+    trim:    true,
+    default: null
   }
 
 }, {

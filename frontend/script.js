@@ -1,95 +1,164 @@
-/* =========================================================
-   SOILSENSE — SCRIPT.JS ÚNICO
-   Maneja el catálogo, las copias de plantas, el jardín y el monitor.
-   ========================================================= */
+const SP_TOKEN_KEY = 'sp_token';
 
-const SP_TOKEN_KEY = "sp_token";
+let ws = null;
+let gardenCache = [];
+let deviceSnapshot = {};
+let pendingDeviceId = null;
+let pendingAssignmentShown = false;
+let currentMonitorPlant = null;
+let currentMonitorData = null;
+let tooltipMetricKey = null;
+let tooltipListenersBound = false;
 
-// ── Redirige a login.html si no hay sesión iniciada ──────────────
-(function protegerPagina() {
+window.logout = logout;
+
+document.addEventListener('DOMContentLoaded', () => {
   const token = localStorage.getItem(SP_TOKEN_KEY);
   if (!token) {
-    window.location.href = "login.html";
+    window.location.href = 'login.html';
+    return;
   }
-})();
 
-// ── Extrae un identificador de usuario del JWT (sin verificar,
-//    solo para namespacear los datos en localStorage) ────────────
-function obtenerIdentificadorDeUsuario() {
-  const token = localStorage.getItem(SP_TOKEN_KEY);
-  if (!token) return "anon";
-  try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.user_id || payload.email || "anon";
-  } catch (error) {
-    console.warn("No se pudo leer el token:", error);
-    return "anon";
-  }
-}
-
-// ── Cierra sesión: borra el token y regresa al login ─────────────
-function logout() {
-  localStorage.removeItem(SP_TOKEN_KEY);
-  window.location.href = "login.html";
-}
-
-const SOILSENSE_STORAGE_KEY = `soilsensePlants:${obtenerIdentificadorDeUsuario()}`;
-const SOILSENSE_SENSOR_PREFIX = `soilsenseSensor:${obtenerIdentificadorDeUsuario()}:`;
-
-let selectedGardenInstanceId = null;
-let monitorTimerId = null;
-
-document.addEventListener("DOMContentLoaded", () => {
   inicializarCarruselPrincipal();
   inicializarCarruselesCatalogo();
   inicializarSeleccionDePlantas();
-  actualizarContadoresDelCatalogo();
   inicializarJardinVirtual();
   inicializarMonitorDePlanta();
+  conectarWebSocket();
+
+  if (document.querySelectorAll('[data-add-plant="true"][data-plant-id]').length > 0) {
+    actualizarContadoresDelCatalogo();
+  }
 });
 
-/* =========================================================
-   1. CARRUSEL PRINCIPAL 3D
-   ========================================================= */
-function inicializarCarruselPrincipal() {
-  document.querySelectorAll(".carousel").forEach((carrusel) => {
-    const tarjetas = Array.from(carrusel.children).filter((elemento) =>
-      elemento.classList.contains("card-container")
-    );
+function logout() {
+  localStorage.removeItem(SP_TOKEN_KEY);
+  window.location.href = 'login.html';
+}
 
+function getToken() {
+  return localStorage.getItem(SP_TOKEN_KEY) || '';
+}
+
+function apiFetch(url, options = {}) {
+  const headers = Object.assign({}, options.headers || {}, {
+    Authorization: `Bearer ${getToken()}`
+  });
+
+  if (options.body && !headers['Content-Type']) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  return fetch(url, { ...options, headers }).then(async (response) => {
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || 'Error en la petición');
+    }
+    return data;
+  });
+}
+
+function conectarWebSocket() {
+  try {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+    ws.addEventListener('message', (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        manejarMensajeWebSocket(data);
+      } catch (error) {
+        console.error('Error leyendo mensaje WS:', error);
+      }
+    });
+
+    ws.addEventListener('error', (error) => {
+      console.error('Error WebSocket:', error);
+    });
+  } catch (error) {
+    console.error('No se pudo inicializar WebSocket:', error);
+  }
+}
+
+function enviarComandoWS(command, extra = {}) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.error('WebSocket no está conectado');
+    return;
+  }
+
+  ws.send(JSON.stringify({
+    command,
+    token: getToken(),
+    ...extra
+  }));
+}
+
+function manejarMensajeWebSocket(data) {
+  if (!data || typeof data !== 'object') return;
+
+  if (data.type === 'device_update') {
+    deviceSnapshot = data.devices || {};
+    renderizarJardinDesdeCache();
+    actualizarContadoresDelCatalogo();
+    manejarDispositivosPendientes();
+    actualizarEstadoMonitorDesdeDispositivos();
+
+    const pendientes = Object.values(deviceSnapshot).filter((device) => device.status === 'pending');
+    if (pendientes.length > 0) {
+      mostrarToast(`Módulo detectado: ${pendientes[0].device_id}. Asigna una planta.`);
+    }
+
+    return;
+  }
+
+  if (data.type === 'sensor_data') {
+    actualizarMonitorEnVivo(data);
+    return;
+  }
+
+  if (data.type === 'watering_started') {
+    marcarRiegoEnMonitor(data.device_id, true);
+    return;
+  }
+
+  if (data.type === 'watering_stopped') {
+    marcarRiegoEnMonitor(data.device_id, false);
+    return;
+  }
+}
+
+function inicializarCarruselPrincipal() {
+  document.querySelectorAll('.carousel').forEach((carrusel) => {
+    const tarjetas = Array.from(carrusel.children).filter((elemento) => elemento.classList.contains('card-container'));
     if (tarjetas.length === 0) return;
 
-    const botonAnterior = carrusel.querySelector(".carousel-nav.left");
-    const botonSiguiente = carrusel.querySelector(".carousel-nav.right");
-    const maxVisibility = Number.parseInt(carrusel.dataset.maxVisibility || "3", 10);
-    const inicioSolicitado = Number.parseInt(carrusel.dataset.start || "0", 10);
-
-    let tarjetaActiva = Number.isNaN(inicioSolicitado)
-      ? 0
-      : limitar(inicioSolicitado, 0, tarjetas.length - 1);
+    const botonAnterior = carrusel.querySelector('.carousel-nav.left');
+    const botonSiguiente = carrusel.querySelector('.carousel-nav.right');
+    const maxVisibility = Number.parseInt(carrusel.dataset.maxVisibility || '3', 10);
+    const inicioSolicitado = Number.parseInt(carrusel.dataset.start || '0', 10);
+    let tarjetaActiva = Number.isNaN(inicioSolicitado) ? 0 : limitar(inicioSolicitado, 0, tarjetas.length - 1);
 
     function actualizarCarrusel() {
       tarjetas.forEach((tarjeta, indice) => {
         const diferencia = tarjetaActiva - indice;
         const distancia = Math.abs(diferencia);
-
-        tarjeta.style.setProperty("--active", indice === tarjetaActiva ? "1" : "0");
-        tarjeta.style.setProperty("--offset", diferencia / 3);
-        tarjeta.style.setProperty("--direction", Math.sign(diferencia));
-        tarjeta.style.setProperty("--abs-offset", distancia / 3);
-        tarjeta.style.pointerEvents = indice === tarjetaActiva ? "auto" : "none";
+        tarjeta.style.setProperty('--active', indice === tarjetaActiva ? '1' : '0');
+        tarjeta.style.setProperty('--offset', diferencia / 3);
+        tarjeta.style.setProperty('--direction', Math.sign(diferencia));
+        tarjeta.style.setProperty('--abs-offset', distancia / 3);
+        tarjeta.style.pointerEvents = indice === tarjetaActiva ? 'auto' : 'none';
 
         const opacidad = indice === tarjetaActiva
           ? 1
           : Math.max(0.08, 1 - distancia * 0.46);
 
-        tarjeta.style.opacity = distancia >= maxVisibility ? "0" : String(opacidad);
-        tarjeta.style.display = distancia > maxVisibility ? "none" : "block";
+        tarjeta.style.opacity = distancia >= maxVisibility ? '0' : String(opacidad);
+        tarjeta.style.display = distancia > maxVisibility ? 'none' : 'block';
 
-        const modelo = tarjeta.querySelector("model-viewer");
+        const modelo = tarjeta.querySelector('model-viewer');
         if (modelo) {
-          if (indice === tarjetaActiva) modelo.setAttribute("auto-rotate", "");
-          else modelo.removeAttribute("auto-rotate");
+          if (indice === tarjetaActiva) modelo.setAttribute('auto-rotate', '');
+          else modelo.removeAttribute('auto-rotate');
         }
       });
 
@@ -97,27 +166,27 @@ function inicializarCarruselPrincipal() {
       if (botonSiguiente) botonSiguiente.disabled = tarjetaActiva === tarjetas.length - 1;
     }
 
-    botonAnterior?.addEventListener("click", () => {
+    botonAnterior?.addEventListener('click', () => {
       if (tarjetaActiva > 0) {
         tarjetaActiva -= 1;
         actualizarCarrusel();
       }
     });
 
-    botonSiguiente?.addEventListener("click", () => {
+    botonSiguiente?.addEventListener('click', () => {
       if (tarjetaActiva < tarjetas.length - 1) {
         tarjetaActiva += 1;
         actualizarCarrusel();
       }
     });
 
-    carrusel.addEventListener("keydown", (evento) => {
-      if (evento.key === "ArrowLeft" && tarjetaActiva > 0) {
+    carrusel.addEventListener('keydown', (evento) => {
+      if (evento.key === 'ArrowLeft' && tarjetaActiva > 0) {
         evento.preventDefault();
         tarjetaActiva -= 1;
         actualizarCarrusel();
       }
-      if (evento.key === "ArrowRight" && tarjetaActiva < tarjetas.length - 1) {
+      if (evento.key === 'ArrowRight' && tarjetaActiva < tarjetas.length - 1) {
         evento.preventDefault();
         tarjetaActiva += 1;
         actualizarCarrusel();
@@ -128,17 +197,14 @@ function inicializarCarruselPrincipal() {
   });
 }
 
-/* =========================================================
-   2. CARRUSELES INFERIORES DEL CATÁLOGO
-   ========================================================= */
 function inicializarCarruselesCatalogo() {
-  document.querySelectorAll(".catalog-carousel").forEach((carrusel) => {
-    const tarjetas = Array.from(carrusel.querySelectorAll(".catalog-item"));
+  document.querySelectorAll('.catalog-carousel').forEach((carrusel) => {
+    const tarjetas = Array.from(carrusel.querySelectorAll('.catalog-item'));
     if (tarjetas.length === 0) return;
 
-    const botonAnterior = carrusel.querySelector(".catalog-arrow.left");
-    const botonSiguiente = carrusel.querySelector(".catalog-arrow.right");
-    const inicioSolicitado = Number.parseInt(carrusel.dataset.start || "0", 10);
+    const botonAnterior = carrusel.querySelector('.catalog-arrow.left');
+    const botonSiguiente = carrusel.querySelector('.catalog-arrow.right');
+    const inicioSolicitado = Number.parseInt(carrusel.dataset.start || '0', 10);
     let activa = Number.isNaN(inicioSolicitado)
       ? 0
       : normalizarIndice(inicioSolicitado, tarjetas.length);
@@ -148,14 +214,14 @@ function inicializarCarruselesCatalogo() {
         const nivel = obtenerNivelCircular(indice, activa, tarjetas.length);
         const visible = Math.abs(nivel) <= 2;
 
-        tarjeta.dataset.level = visible ? String(nivel) : "hidden";
-        tarjeta.setAttribute("aria-hidden", visible ? "false" : "true");
+        tarjeta.dataset.level = visible ? String(nivel) : 'hidden';
+        tarjeta.setAttribute('aria-hidden', visible ? 'false' : 'true');
         tarjeta.tabIndex = nivel === 0 ? 0 : -1;
 
-        const modelo = tarjeta.querySelector("model-viewer");
+        const modelo = tarjeta.querySelector('model-viewer');
         if (modelo) {
-          if (nivel === 0) modelo.setAttribute("auto-rotate", "");
-          else modelo.removeAttribute("auto-rotate");
+          if (nivel === 0) modelo.setAttribute('auto-rotate', '');
+          else modelo.removeAttribute('auto-rotate');
         }
       });
     }
@@ -165,15 +231,15 @@ function inicializarCarruselesCatalogo() {
       actualizar();
     }
 
-    botonAnterior?.addEventListener("click", () => mover(-1));
-    botonSiguiente?.addEventListener("click", () => mover(1));
+    botonAnterior?.addEventListener('click', () => mover(-1));
+    botonSiguiente?.addEventListener('click', () => mover(1));
 
-    carrusel.addEventListener("keydown", (evento) => {
-      if (evento.key === "ArrowLeft") {
+    carrusel.addEventListener('keydown', (evento) => {
+      if (evento.key === 'ArrowLeft') {
         evento.preventDefault();
         mover(-1);
       }
-      if (evento.key === "ArrowRight") {
+      if (evento.key === 'ArrowRight') {
         evento.preventDefault();
         mover(1);
       }
@@ -194,171 +260,173 @@ function normalizarIndice(indice, total) {
   return ((indice % total) + total) % total;
 }
 
-/* =========================================================
-   3. CATÁLOGO: CADA CLIC CREA UNA INSTANCIA NUEVA
-   ========================================================= */
 function inicializarSeleccionDePlantas() {
-  document
-    .querySelectorAll('[data-add-plant="true"][data-plant-id]')
-    .forEach((tarjeta) => {
-      tarjeta.addEventListener("click", () => añadirNuevaInstancia(tarjeta));
-      tarjeta.addEventListener("keydown", (evento) => {
-        if (evento.key === "Enter" || evento.key === " ") {
-          evento.preventDefault();
-          añadirNuevaInstancia(tarjeta);
-        }
-      });
+  document.querySelectorAll('[data-add-plant="true"][data-plant-id]').forEach((tarjeta) => {
+    tarjeta.addEventListener('click', () => añadirNuevaInstancia(tarjeta));
+    tarjeta.addEventListener('keydown', (evento) => {
+      if (evento.key === 'Enter' || evento.key === ' ') {
+        evento.preventDefault();
+        añadirNuevaInstancia(tarjeta);
+      }
     });
+  });
 }
 
-function añadirNuevaInstancia(tarjeta) {
-  const plantId = tarjeta.dataset.plantId?.trim();
-  const name = tarjeta.dataset.plantName?.trim();
-  const model = tarjeta.dataset.model?.trim();
+async function añadirNuevaInstancia(tarjeta) {
+  const plantTypeName = tarjeta.dataset.plantName?.trim();
+  const plantTypeKey = tarjeta.dataset.plantId?.trim();
+  const modelSrc = tarjeta.dataset.model?.trim();
 
-  if (!plantId || !name || !model) {
-    console.error("La tarjeta necesita data-plant-id, data-plant-name y data-model.");
-    mostrarToast("No se pudo añadir esta planta.");
+  if (!plantTypeName || !plantTypeKey) {
+    console.error('La tarjeta no tiene data-plant-name o data-plant-id.');
+    mostrarToast('No se pudo añadir esta planta.');
     return;
   }
 
-  const plantas = obtenerPlantasGuardadas();
-  const nuevaPlanta = {
-    instanceId: crearInstanceId(plantId),
-    plantId,
-    id: plantId,
-    name,
-    type: tarjeta.dataset.plantType?.trim() || "Planta",
-    model,
-    credit: tarjeta.dataset.credit?.trim() || "",
-    createdAt: new Date().toISOString()
-  };
+  try {
+    await apiFetch('/api/garden', {
+      method: 'POST',
+      body: JSON.stringify({
+        plant_type_name: plantTypeName,
+        plant_type_key: plantTypeKey,
+        plant_type: tarjeta.dataset.plantType?.trim() || '',
+        model_src: modelSrc
+      })
+    });
 
-  plantas.push(nuevaPlanta);
-  guardarPlantas(plantas);
-
-  const cantidad = plantas.filter((planta) => planta.plantId === plantId).length;
-  actualizarEstadoDeEspecie(plantId, cantidad);
-  mostrarToast(`${name} añadida. Ahora tienes ${cantidad} ${cantidad === 1 ? "copia" : "copias"}.`);
+    await cargarJardin();
+    mostrarToast(`${plantTypeName} añadida al jardín.`);
+  } catch (error) {
+    console.error('Error al añadir planta:', error);
+    mostrarToast('No se pudo añadir esta planta.');
+  }
 }
 
 function actualizarContadoresDelCatalogo() {
-  const conteos = contarPorEspecie(obtenerPlantasGuardadas());
-  document
-    .querySelectorAll('[data-add-plant="true"][data-plant-id]')
-    .forEach((tarjeta) => {
-      const cantidad = conteos.get(tarjeta.dataset.plantId) || 0;
-      actualizarTarjetaDeCatalogo(tarjeta, cantidad);
-    });
-}
-
-function actualizarEstadoDeEspecie(plantId, cantidad) {
-  document
-    .querySelectorAll('[data-add-plant="true"][data-plant-id]')
-    .forEach((tarjeta) => {
-      if (tarjeta.dataset.plantId === plantId) actualizarTarjetaDeCatalogo(tarjeta, cantidad);
-    });
+  const conteos = contarPorEspecie(gardenCache);
+  document.querySelectorAll('[data-add-plant="true"][data-plant-id]').forEach((tarjeta) => {
+    const cantidad = conteos.get(normalizarClave(tarjeta.dataset.plantName || tarjeta.dataset.plantId)) || 0;
+    actualizarTarjetaDeCatalogo(tarjeta, cantidad);
+  });
 }
 
 function actualizarTarjetaDeCatalogo(tarjeta, cantidad) {
-  const estado = tarjeta.querySelector(".plant-status");
-  tarjeta.classList.toggle("has-copies", cantidad > 0);
-  if (estado) estado.textContent = cantidad > 0 ? `En jardín ×${cantidad} · añadir otra` : "Click para añadir";
+  const estado = tarjeta.querySelector('.plant-status');
+  tarjeta.classList.toggle('has-copies', cantidad > 0);
+  if (estado) {
+    estado.textContent = cantidad > 0 ? `En jardín ×${cantidad} · añadir otra` : 'Click para añadir';
+  }
 }
 
 function contarPorEspecie(plantas) {
   const conteos = new Map();
   plantas.forEach((planta) => {
-    conteos.set(planta.plantId, (conteos.get(planta.plantId) || 0) + 1);
+    const clave = normalizarClave(planta.plant_type_id?.display_name || planta.plant_type_id?.name || '');
+    conteos.set(clave, (conteos.get(clave) || 0) + 1);
   });
   return conteos;
 }
 
-/* =========================================================
-   4. VIRTUAL GARDEN: GRID DE MODELOS 3D
-   ========================================================= */
-function inicializarJardinVirtual() {
-  const grid = document.getElementById("gardenGrid");
-  if (!grid) return;
-
-  renderizarJardinVirtual();
-
-  const dialogo = document.getElementById("plantActionsDialog");
-  const eliminar = document.getElementById("deletePlantAction");
-
-  eliminar?.addEventListener("click", () => {
-    if (!selectedGardenInstanceId) return;
-    eliminarInstancia(selectedGardenInstanceId);
-    if (dialogo?.open) dialogo.close();
-  });
-
-  dialogo?.addEventListener("close", () => {
-    limpiarSeleccionDelJardin();
-  });
-
-  document.addEventListener("click", (evento) => {
-    if (!evento.target.closest(".garden-plant-card") && !evento.target.closest(".plant-actions-dialog")) {
-      limpiarSeleccionDelJardin();
-    }
-  });
+function normalizarClave(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-');
 }
 
-function renderizarJardinVirtual() {
-  const grid = document.getElementById("gardenGrid");
-  const empty = document.getElementById("gardenEmpty");
-  const count = document.getElementById("gardenCount");
+function inicializarJardinVirtual() {
+  const grid = document.getElementById('gardenGrid');
   if (!grid) return;
 
-  const plantas = obtenerPlantasGuardadas();
-  const totales = contarPorEspecie(plantas);
-  const vistos = new Map();
+  const dialogo = document.getElementById('plantActionsDialog');
+  const eliminar = document.getElementById('deletePlantAction');
+
+  eliminar?.addEventListener('click', async () => {
+    if (!currentMonitorPlant) return;
+    try {
+      await apiFetch(`/api/garden/${currentMonitorPlant._id}`, { method: 'DELETE' });
+      currentMonitorPlant = null;
+      await cargarJardin();
+      renderizarJardinDesdeCache();
+      if (dialogo?.open) dialogo.close();
+      mostrarToast('Planta eliminada.');
+    } catch (error) {
+      console.error('Error al eliminar planta:', error);
+      mostrarToast('No se pudo eliminar la planta.');
+    }
+  });
+
+  dialogo?.addEventListener('close', () => {
+    currentMonitorPlant = null;
+  });
+
+  cargarJardin();
+}
+
+async function cargarJardin() {
+  try {
+    const response = await apiFetch('/api/garden');
+    gardenCache = response.garden || [];
+    renderizarJardinDesdeCache();
+    actualizarContadoresDelCatalogo();
+    manejarDispositivosPendientes();
+    detectarPlantaEnMonitorDesdeCache();
+  } catch (error) {
+    console.error('Error al cargar jardín:', error);
+    gardenCache = [];
+    renderizarJardinDesdeCache();
+  }
+}
+
+function renderizarJardinDesdeCache() {
+  const grid = document.getElementById('gardenGrid');
+  const empty = document.getElementById('gardenEmpty');
+  const count = document.getElementById('gardenCount');
+  if (!grid) return;
 
   grid.replaceChildren();
-  if (empty) empty.hidden = plantas.length > 0;
-  if (count) count.textContent = `${plantas.length} ${plantas.length === 1 ? "planta" : "plantas"}`;
+  if (empty) empty.hidden = gardenCache.length > 0;
+  if (count) count.textContent = `${gardenCache.length} ${gardenCache.length === 1 ? 'planta' : 'plantas'}`;
 
-  plantas.forEach((planta) => {
-    const numero = (vistos.get(planta.plantId) || 0) + 1;
-    vistos.set(planta.plantId, numero);
-    const nombreVisible = totales.get(planta.plantId) > 1 ? `${planta.name} ${numero}` : planta.name;
-
-    const tarjeta = document.createElement("article");
-    tarjeta.className = "garden-plant-card";
+  gardenCache.forEach((planta) => {
+    const tarjeta = document.createElement('article');
+    tarjeta.className = 'garden-plant-card';
     tarjeta.tabIndex = 0;
-    tarjeta.dataset.instanceId = planta.instanceId;
-    tarjeta.setAttribute("role", "button");
-    tarjeta.setAttribute("aria-label", `${nombreVisible}. Haz clic para ver opciones.`);
+    tarjeta.dataset.instanceId = planta._id;
+    tarjeta.setAttribute('role', 'button');
 
-    const modelo = document.createElement("model-viewer");
-    modelo.src = planta.model;
-    modelo.alt = `Modelo 3D de ${nombreVisible}`;
-    modelo.setAttribute("auto-rotate", "");
-    modelo.setAttribute("auto-rotate-delay", "0");
-    modelo.setAttribute("rotation-per-second", "18deg");
-    modelo.setAttribute("shadow-intensity", "1");
-    modelo.setAttribute("interaction-prompt", "none");
+    const modelo = document.createElement('model-viewer');
+    modelo.src = planta.model_src || '';
+    modelo.alt = `Modelo 3D de ${obtenerNombreDePlanta(planta)}`;
+    modelo.setAttribute('auto-rotate', '');
+    modelo.setAttribute('auto-rotate-delay', '0');
+    modelo.setAttribute('rotation-per-second', '18deg');
+    modelo.setAttribute('shadow-intensity', '1');
+    modelo.setAttribute('interaction-prompt', 'none');
 
-    const info = document.createElement("div");
-    info.className = "garden-plant-info";
+    const info = document.createElement('div');
+    info.className = 'garden-plant-info';
 
-    const tipo = document.createElement("span");
-    tipo.className = "garden-plant-type";
-    tipo.textContent = planta.type;
+    const tipo = document.createElement('span');
+    tipo.className = 'garden-plant-type';
+    tipo.textContent = planta.plant_type_id?.display_name || planta.plant_type_id?.name || 'Planta';
 
-    const nombre = document.createElement("strong");
-    nombre.textContent = nombreVisible;
+    const nombre = document.createElement('strong');
+    nombre.textContent = obtenerNombreDePlanta(planta);
 
-    const hint = document.createElement("span");
-    hint.className = "garden-plant-hint";
-    hint.textContent = "Haz clic para seleccionar";
+    const estado = document.createElement('span');
+    estado.className = 'garden-plant-hint';
+    estado.textContent = planta.device_id ? `Asignada a ${planta.device_id}` : 'Sin dispositivo asignado';
 
-    info.append(tipo, nombre, hint);
+    info.append(tipo, nombre, estado);
     tarjeta.append(modelo, info);
 
-    const activar = () => manejarClickDePlanta(tarjeta, planta, nombreVisible);
-    tarjeta.addEventListener("click", activar);
-    tarjeta.addEventListener("keydown", (evento) => {
-      if (evento.key === "Enter" || evento.key === " ") {
+    const activar = () => abrirDialogoDePlanta(planta);
+    tarjeta.addEventListener('click', activar);
+    tarjeta.addEventListener('keydown', (evento) => {
+      if (evento.key === 'Enter' || evento.key === ' ') {
         evento.preventDefault();
         activar();
       }
@@ -368,175 +436,173 @@ function renderizarJardinVirtual() {
   });
 }
 
-function manejarClickDePlanta(tarjeta, planta, nombreVisible) {
-  limpiarSeleccionDelJardin();
-
-  selectedGardenInstanceId = planta.instanceId;
-  tarjeta.classList.add("is-selected");
-
-  abrirDialogoDePlanta(planta, nombreVisible);
+function obtenerNombreDePlanta(planta) {
+  return planta?.plant_type_id?.display_name || planta?.plant_type_id?.name || 'Planta';
 }
 
-function abrirDialogoDePlanta(planta, nombreVisible) {
-  const dialogo = document.getElementById("plantActionsDialog");
-  const nombre = document.getElementById("actionPlantName");
-  const tipo = document.getElementById("actionPlantType");
-  const monitor = document.getElementById("viewMonitorAction");
+function abrirDialogoDePlanta(planta) {
+  const dialogo = document.getElementById('plantActionsDialog');
+  const nombre = document.getElementById('actionPlantName');
+  const tipo = document.getElementById('actionPlantType');
+  const monitor = document.getElementById('viewMonitorAction');
 
-  if (nombre) nombre.textContent = nombreVisible;
-  if (tipo) tipo.textContent = planta.type;
-  if (monitor) monitor.href = `monitor.html?plant=${encodeURIComponent(planta.instanceId)}`;
-
+  currentMonitorPlant = planta;
+  if (nombre) nombre.textContent = obtenerNombreDePlanta(planta);
+  if (tipo) tipo.textContent = planta.plant_type_id?.display_name || planta.plant_type_id?.name || '';
+  if (monitor) monitor.href = `monitor.html?plant=${encodeURIComponent(planta._id)}&window=24h`;
   if (dialogo?.showModal) dialogo.showModal();
 }
 
-function limpiarSeleccionDelJardin() {
-  selectedGardenInstanceId = null;
-  document.querySelectorAll(".garden-plant-card.is-selected").forEach((tarjeta) => {
-    tarjeta.classList.remove("is-selected");
-    const hint = tarjeta.querySelector(".garden-plant-hint");
-    if (hint) hint.textContent = "Haz clic para seleccionar";
-  });
-}
-
-function eliminarInstancia(instanceId) {
-  const plantas = obtenerPlantasGuardadas();
-  const eliminada = plantas.find((planta) => planta.instanceId === instanceId);
-  const actualizadas = plantas.filter((planta) => planta.instanceId !== instanceId);
-
-  guardarPlantas(actualizadas);
-  localStorage.removeItem(`${SOILSENSE_SENSOR_PREFIX}${instanceId}`);
-  selectedGardenInstanceId = null;
-  renderizarJardinVirtual();
-  actualizarContadoresDelCatalogo();
-  mostrarToast(eliminada ? `${eliminada.name} fue eliminada.` : "Planta eliminada.");
-}
-
-/* =========================================================
-   5. MONITOR INDEPENDIENTE PARA CADA INSTANCIA
-   monitor.html?plant=INSTANCE_ID
-   ========================================================= */
-function inicializarMonitorDePlanta() {
-  const monitorPage = document.getElementById("monitorPage");
+function detectarPlantaEnMonitorDesdeCache() {
+  const monitorPage = document.getElementById('monitorPage');
   if (!monitorPage) return;
 
-  const instanceId = new URLSearchParams(window.location.search).get("plant");
-  const plantas = obtenerPlantasGuardadas();
-  const planta = plantas.find((item) => item.instanceId === instanceId);
-
-  if (!planta) {
-    document.getElementById("monitorPlantOverview")?.setAttribute("hidden", "");
-    document.getElementById("monitorContent")?.setAttribute("hidden", "");
-    const noEncontrada = document.getElementById("monitorNotFound");
-    if (noEncontrada) noEncontrada.hidden = false;
-    document.getElementById("monitorHeaderSubtitle").textContent = "El enlace no corresponde a una planta activa.";
+  const instanceId = new URLSearchParams(window.location.search).get('plant');
+  if (!instanceId) {
+    mostrarMonitorNoEncontrado('El enlace no corresponde a una planta activa.');
     return;
   }
 
-  const nombreVisible = obtenerNombreVisibleDeInstancia(planta, plantas);
-  document.title = `${nombreVisible} — Monitor SoilSense`;
-  document.getElementById("monitorHeaderTitle").textContent = nombreVisible;
-  document.getElementById("monitorHeaderSubtitle").textContent = `Datos exclusivos del módulo asignado a ${nombreVisible}.`;
-  document.getElementById("monitorPlantName").textContent = nombreVisible;
-  document.getElementById("monitorPlantType").textContent = planta.type;
-  document.getElementById("monitorPlantInstance").textContent = `ID: ${abreviarInstanceId(planta.instanceId)}`;
-
-  const modelo = document.getElementById("monitorPlantModel");
-  if (modelo) {
-    modelo.src = planta.model;
-    modelo.alt = `Modelo 3D de ${nombreVisible}`;
+  const planta = gardenCache.find((item) => item._id === instanceId);
+  if (!planta) {
+    mostrarMonitorNoEncontrado('La planta pudo haber sido eliminada o el enlace es inválido.');
+    return;
   }
 
-  const state = obtenerEstadoDeSensores(planta.instanceId);
-  renderizarTodosLosSensores(state);
-  inicializarTooltipDeSensores(state, planta.instanceId);
-
-  monitorTimerId = window.setInterval(() => {
-    actualizarLecturas(state);
-    guardarEstadoDeSensores(planta.instanceId, state);
-    renderizarTodosLosSensores(state);
-    actualizarTooltipAbierto(state);
-  }, 4000);
+  currentMonitorPlant = planta;
+  cargarMonitorDesdeAPI(planta, new URLSearchParams(window.location.search).get('window') || '1h');
 }
 
-function obtenerNombreVisibleDeInstancia(planta, plantas) {
-  const iguales = plantas.filter((item) => item.plantId === planta.plantId);
-  if (iguales.length <= 1) return planta.name;
-  const indice = iguales.findIndex((item) => item.instanceId === planta.instanceId);
-  return `${planta.name} ${indice + 1}`;
+async function inicializarMonitorDePlanta() {
+  const monitorPage = document.getElementById('monitorPage');
+  if (!monitorPage) return;
+
+  const instanceId = new URLSearchParams(window.location.search).get('plant');
+  if (!instanceId) return;
+
+  const boton = document.getElementById('wateringButton');
+  boton?.addEventListener('click', manejarClickRiego);
+
+  await cargarMonitorDesdeAPIPlaceholder(instanceId);
 }
 
-function obtenerEstadoDeSensores(instanceId) {
-  const key = `${SOILSENSE_SENSOR_PREFIX}${instanceId}`;
+async function cargarMonitorDesdeAPIPlaceholder(instanceId) {
+  const planta = gardenCache.find((item) => item._id === instanceId);
+  if (planta) {
+    await cargarMonitorDesdeAPI(planta, new URLSearchParams(window.location.search).get('window') || '1h');
+    return;
+  }
+
   try {
-    const guardado = JSON.parse(localStorage.getItem(key));
-    if (guardado?.metrics) return guardado;
+    const response = await apiFetch(`/api/monitor/${encodeURIComponent(instanceId)}?window=${encodeURIComponent(new URLSearchParams(window.location.search).get('window') || '1h')}`);
+    currentMonitorData = response;
+    currentMonitorPlant = response.garden_plant || null;
+    renderizarMonitor(response);
   } catch (error) {
-    console.warn("No se pudo recuperar el estado del sensor:", error);
+    console.error('Error al cargar monitor:', error);
+    mostrarMonitorNoEncontrado('La planta pudo haber sido eliminada o el enlace no es válido.');
+  }
+}
+
+async function cargarMonitorDesdeAPI(planta, windowKey) {
+  try {
+    const response = await apiFetch(`/api/monitor/${encodeURIComponent(planta._id)}?window=${encodeURIComponent(windowKey)}`);
+    currentMonitorData = response;
+    currentMonitorPlant = response.garden_plant || planta;
+    renderizarMonitor(response);
+  } catch (error) {
+    console.error('Error al cargar monitor:', error);
+    mostrarMonitorNoEncontrado('La planta pudo haber sido eliminada o el enlace no es válido.');
+  }
+}
+
+function renderizarMonitor(data) {
+  const monitorPage = document.getElementById('monitorPage');
+  if (!monitorPage) return;
+
+  const gardenPlant = data.garden_plant || currentMonitorPlant;
+  const plantType = gardenPlant?.plant_type_id || {};
+  const telemetry = data.telemetry || crearTelemetriaVacia(12);
+
+  document.getElementById('monitorPlantOverview')?.removeAttribute('hidden');
+  document.getElementById('monitorContent')?.removeAttribute('hidden');
+  document.getElementById('monitorNotFound')?.setAttribute('hidden', '');
+  document.getElementById('monitorHeaderTitle').textContent = obtenerNombreDePlanta(gardenPlant);
+  document.getElementById('monitorHeaderSubtitle').textContent = gardenPlant?.device_id
+    ? `Datos exclusivos del módulo asignado a ${obtenerNombreDePlanta(gardenPlant)}.`
+    : 'La planta todavía no tiene un dispositivo asignado.';
+  document.getElementById('monitorPlantName').textContent = obtenerNombreDePlanta(gardenPlant);
+  document.getElementById('monitorPlantType').textContent = plantType.display_name || plantType.name || 'Tipo de planta';
+  document.getElementById('monitorPlantInstance').textContent = `ID: ${abreviarInstanceId(gardenPlant?._id)}`;
+
+  const modelo = document.getElementById('monitorPlantModel');
+  if (modelo) {
+    modelo.src = gardenPlant?.model_src || '';
+    modelo.alt = `Modelo 3D de ${obtenerNombreDePlanta(gardenPlant)}`;
   }
 
-  const seed = hashTexto(instanceId);
-  const estado = {
-    metrics: {
-      temp: crearMetrica(20 + (seed % 9), 8, 42, 3, "°C", "Temperatura", "#c0573a", seed + 1),
-      humedad: crearMetrica(48 + (seed % 28), 25, 88, 6, "%", "Humedad / Nivel de agua", "#4a90d9", seed + 2),
-      nitrogeno: crearMetrica(35 + (seed % 31), 15, 85, 7, "%", "Nitrógeno (N)", "#4a7c59", seed + 3),
-      fosforo: crearMetrica(25 + (seed % 30), 10, 75, 7, "%", "Fósforo (P)", "#c79a35", seed + 4),
-      potasio: crearMetrica(40 + (seed % 31), 20, 88, 7, "%", "Potasio (K)", "#7a63ad", seed + 5)
-    },
-    updatedAt: new Date().toISOString()
+  const state = convertirTelemetriaAEstado(telemetry, plantType.ideal);
+  currentMonitorData = {
+    ...data,
+    telemetry,
+    state
   };
 
-  guardarEstadoDeSensores(instanceId, estado);
-  return estado;
+  renderizarTodosLosSensores(state);
+  inicializarTooltipDeSensores(state);
+  renderizarRecomendaciones(plantType.ideal);
+  actualizarBotonRiego(state, plantType.ideal, gardenPlant?.device_id);
+
+  if (gardenPlant?.device_id) {
+    currentMonitorPlant.device_id = gardenPlant.device_id;
+  }
 }
 
-function crearMetrica(value, realMin, realMax, spread, unit, label, color, seed) {
+function crearTelemetriaVacia(sampleCount = 12) {
   return {
-    value,
-    realMin,
-    realMax,
-    spread,
+    humidity: Array(sampleCount).fill(0),
+    temperature: Array(sampleCount).fill(0),
+    nitrogeno: Array(sampleCount).fill(0),
+    fosforo: Array(sampleCount).fill(0),
+    potasio: Array(sampleCount).fill(0)
+  };
+}
+
+function convertirTelemetriaAEstado(telemetry, ideal) {
+  const humedad = ultimoValor(telemetry.humidity);
+  const temperature = ultimoValor(telemetry.temperature);
+  const nitrogeno = ultimoValor(telemetry.nitrogeno);
+  const fosforo = ultimoValor(telemetry.fosforo);
+  const potasio = ultimoValor(telemetry.potasio);
+
+  return {
+    metrics: {
+      temp: crearMetrica(temperature, '°C', 'Temperatura del suelo', '#c0573a', telemetry.temperature || []),
+      humedad: crearMetrica(humedad, '%', 'Humedad / nivel de agua', '#4a90d9', telemetry.humidity || []),
+      nitrogeno: crearMetrica(nitrogeno, '%', 'Nitrógeno (N)', '#4a7c59', telemetry.nitrogeno || []),
+      fosforo: crearMetrica(fosforo, '%', 'Fósforo (P)', '#c79a35', telemetry.fosforo || []),
+      potasio: crearMetrica(potasio, '%', 'Potasio (K)', '#7a63ad', telemetry.potasio || [])
+    },
+    ideal: ideal || null,
+    latestHumidity: humedad,
+    isWatering: false
+  };
+}
+
+function crearMetrica(value, unit, label, color, history) {
+  return {
+    value: Number.isFinite(value) ? value : 0,
     unit,
     label,
     color,
-    history: crearHistorial(value, spread, realMin, realMax, seed)
+    history: Array.isArray(history) && history.length > 0 ? history : [0]
   };
 }
 
-function crearHistorial(value, spread, min, max, seed) {
-  const history = [value];
-  let actual = value;
-  let numero = seed >>> 0;
-
-  for (let i = 0; i < 11; i += 1) {
-    numero = (numero * 1664525 + 1013904223) >>> 0;
-    const aleatorio = numero / 4294967296;
-    actual = limitar(actual + (aleatorio - 0.5) * spread * 1.4, min, max);
-    history.unshift(actual);
-  }
-  return history;
-}
-
-function actualizarLecturas(state) {
-  Object.values(state.metrics).forEach((metrica) => {
-    metrica.value = limitar(
-      metrica.value + (Math.random() - 0.5) * metrica.spread,
-      metrica.realMin,
-      metrica.realMax
-    );
-    metrica.history.push(metrica.value);
-    if (metrica.history.length > 12) metrica.history.shift();
-  });
-  state.updatedAt = new Date().toISOString();
-}
-
-function guardarEstadoDeSensores(instanceId, state) {
-  try {
-    localStorage.setItem(`${SOILSENSE_SENSOR_PREFIX}${instanceId}`, JSON.stringify(state));
-  } catch (error) {
-    console.warn("No se pudo guardar el estado del sensor:", error);
-  }
+function ultimoValor(values) {
+  if (!Array.isArray(values) || values.length === 0) return 0;
+  const value = values[values.length - 1];
+  return Number.isFinite(value) ? value : 0;
 }
 
 function renderizarTodosLosSensores(state) {
@@ -546,27 +612,28 @@ function renderizarTodosLosSensores(state) {
 function renderizarSensor(key, metrica) {
   const porcentaje = limitar(metrica.value, 0, 100);
 
-  if (key === "temp") {
-    const fill = document.getElementById("thermoFill");
-    const value = document.getElementById("tempValue");
+  if (key === 'temp') {
+    const fill = document.getElementById('thermoFill');
+    const value = document.getElementById('tempValue');
     if (fill) fill.style.height = `${porcentaje}%`;
     if (value) value.textContent = `${Math.round(metrica.value)}°C`;
     return;
   }
 
-  if (key === "humedad") {
-    const fill = document.getElementById("tankFill");
-    const value = document.getElementById("humValue");
+  if (key === 'humedad') {
+    const fill = document.getElementById('tankFill');
+    const value = document.getElementById('humValue');
     if (fill) fill.style.height = `${porcentaje}%`;
     if (value) value.textContent = `${Math.round(metrica.value)}%`;
     return;
   }
 
   const ids = {
-    nitrogeno: ["nFill", "nValue"],
-    fosforo: ["pFill", "pValue"],
-    potasio: ["kFill", "kValue"]
+    nitrogeno: ['nFill', 'nValue'],
+    fosforo: ['pFill', 'pValue'],
+    potasio: ['kFill', 'kValue']
   };
+
   const [fillId, valueId] = ids[key] || [];
   const fill = document.getElementById(fillId);
   const value = document.getElementById(valueId);
@@ -574,39 +641,38 @@ function renderizarSensor(key, metrica) {
   if (value) value.textContent = `${Math.round(metrica.value)}%`;
 }
 
-let tooltipMetricKey = null;
-let tooltipState = null;
-
 function inicializarTooltipDeSensores(state) {
-  tooltipState = state;
-  const tooltip = document.getElementById("histTooltip");
+  const tooltip = document.getElementById('histTooltip');
   if (!tooltip) return;
 
-  document.querySelectorAll("[data-metric]").forEach((elemento) => {
+  if (tooltipListenersBound) return;
+  tooltipListenersBound = true;
+
+  document.querySelectorAll('[data-metric]').forEach((elemento) => {
     const key = elemento.dataset.metric;
-    elemento.addEventListener("mouseenter", () => abrirTooltip(key, elemento, state));
-    elemento.addEventListener("mouseleave", cerrarTooltip);
-    elemento.addEventListener("click", (evento) => {
+    elemento.addEventListener('mouseenter', () => abrirTooltip(key, elemento, state));
+    elemento.addEventListener('mouseleave', cerrarTooltip);
+    elemento.addEventListener('click', (evento) => {
       evento.stopPropagation();
       if (tooltipMetricKey === key) cerrarTooltip();
       else abrirTooltip(key, elemento, state);
     });
   });
 
-  document.addEventListener("click", (evento) => {
-    if (!evento.target.closest("[data-metric]") && !evento.target.closest(".hist-tooltip")) cerrarTooltip();
+  document.addEventListener('click', (evento) => {
+    if (!evento.target.closest('[data-metric]') && !evento.target.closest('.hist-tooltip')) cerrarTooltip();
   });
 }
 
 function abrirTooltip(key, elemento, state) {
   const metrica = state.metrics[key];
-  const tooltip = document.getElementById("histTooltip");
+  const tooltip = document.getElementById('histTooltip');
   if (!metrica || !tooltip) return;
 
   tooltipMetricKey = key;
-  document.getElementById("histTitle").textContent = `Histórico · ${metrica.label}`;
-  document.getElementById("histNow").textContent = `${Math.round(metrica.value)}${metrica.unit}`;
-  document.getElementById("histSvg").innerHTML = construirSparkline(metrica.history, metrica.color);
+  document.getElementById('histTitle').textContent = `Histórico · ${metrica.label}`;
+  document.getElementById('histNow').textContent = `${Math.round(metrica.value)}${metrica.unit}`;
+  document.getElementById('histSvg').innerHTML = construirSparkline(metrica.history, metrica.color);
 
   const rect = elemento.getBoundingClientRect();
   const width = tooltip.offsetWidth || 260;
@@ -618,7 +684,7 @@ function abrirTooltip(key, elemento, state) {
 
   tooltip.style.left = `${left}px`;
   tooltip.style.top = `${top}px`;
-  tooltip.classList.add("visible");
+  tooltip.classList.add('visible');
 }
 
 function actualizarTooltipAbierto(state) {
@@ -629,7 +695,7 @@ function actualizarTooltipAbierto(state) {
 
 function cerrarTooltip() {
   tooltipMetricKey = null;
-  document.getElementById("histTooltip")?.classList.remove("visible");
+  document.getElementById('histTooltip')?.classList.remove('visible');
 }
 
 function construirSparkline(history, color) {
@@ -647,7 +713,7 @@ function construirSparkline(history, color) {
     return [x, y];
   });
 
-  const line = puntos.map((punto) => punto.join(",")).join(" ");
+  const line = puntos.map((punto) => punto.join(',')).join(' ');
   const area = `${pad},${height - pad} ${line} ${width - pad},${height - pad}`;
   const ultimo = puntos[puntos.length - 1];
 
@@ -658,73 +724,227 @@ function construirSparkline(history, color) {
   `;
 }
 
-/* =========================================================
-   6. ALMACENAMIENTO Y UTILIDADES
-   ========================================================= */
-function obtenerPlantasGuardadas() {
-  let plantas = [];
-  try {
-    const datos = JSON.parse(localStorage.getItem(SOILSENSE_STORAGE_KEY));
-    plantas = Array.isArray(datos) ? datos : [];
-  } catch (error) {
-    console.warn("No se pudieron leer las plantas guardadas:", error);
+function renderizarRecomendaciones(ideal) {
+  const contenedor = document.getElementById('recommendationsSpace');
+  if (!contenedor) return;
+
+  if (!ideal) {
+    contenedor.textContent = 'No hay umbrales disponibles para esta planta.';
+    return;
   }
 
-  let huboMigracion = false;
-  plantas = plantas.map((planta, indice) => {
-    const plantId = String(planta.plantId || planta.id || slug(planta.name || "planta"));
-    if (planta.instanceId) {
-      return { ...planta, plantId, id: plantId };
+  contenedor.innerHTML = `
+    <p>Humedad óptima: ${ideal.humidity.min}% - ${ideal.humidity.max}%</p>
+    <p>Temperatura óptima: ${ideal.temperature.min}°C - ${ideal.temperature.max}°C</p>
+    <p>Nitrógeno: ${ideal.nitrogeno.min} - ${ideal.nitrogeno.max}</p>
+    <p>Fósforo: ${ideal.fosforo.min} - ${ideal.fosforo.max}</p>
+    <p>Potasio: ${ideal.potasio.min} - ${ideal.potasio.max}</p>
+  `;
+}
+
+function actualizarBotonRiego(state, ideal, deviceId) {
+  const boton = document.getElementById('wateringButton');
+  if (!boton) return;
+
+  const humedadMinima = ideal?.humidity?.min ?? 0;
+  const puedeActivar = Boolean(deviceId) && !state.isWatering && state.latestHumidity < humedadMinima;
+
+  boton.disabled = !state.isWatering && !puedeActivar;
+  boton.textContent = state.isWatering ? '💧 Detener riego' : '💧 Activar riego';
+  boton.dataset.deviceId = deviceId || '';
+  boton.dataset.humidityMin = String(humedadMinima);
+}
+
+function manejarClickRiego() {
+  const boton = document.getElementById('wateringButton');
+  if (!boton || !currentMonitorData) return;
+
+  const deviceId = boton.dataset.deviceId;
+  const ideal = currentMonitorData.garden_plant?.plant_type_id?.ideal || null;
+  const state = currentMonitorData.state || {};
+
+  if (!deviceId) {
+    console.error('La planta no tiene dispositivo asignado');
+    return;
+  }
+
+  if (state.isWatering) {
+    enviarComandoWS('LED_OFF', { device_id: deviceId });
+    state.isWatering = false;
+    actualizarBotonRiego(state, ideal, deviceId);
+    return;
+  }
+
+  const humedadMinima = ideal?.humidity?.min ?? 0;
+  if (state.latestHumidity >= humedadMinima) {
+    console.error('La humedad actual todavía no está por debajo del umbral óptimo');
+    return;
+  }
+
+  enviarComandoWS('LED_ON', { device_id: deviceId });
+  state.isWatering = true;
+  actualizarBotonRiego(state, ideal, deviceId);
+}
+
+function actualizarMonitorEnVivo(data) {
+  if (!currentMonitorPlant || data.device_id !== currentMonitorPlant.device_id) return;
+
+  const telemetry = currentMonitorData?.telemetry || crearTelemetriaVacia(12);
+  telemetry.humidity = pushHistory(telemetry.humidity, data.humidity);
+  telemetry.temperature = pushHistory(telemetry.temperature, data.temperature);
+  telemetry.nitrogeno = pushHistory(telemetry.nitrogeno, data.nitrogeno);
+  telemetry.fosforo = pushHistory(telemetry.fosforo, data.fosforo);
+  telemetry.potasio = pushHistory(telemetry.potasio, data.potasio);
+
+  currentMonitorData.telemetry = telemetry;
+  currentMonitorData.state = convertirTelemetriaAEstado(telemetry, currentMonitorData.garden_plant?.plant_type_id?.ideal || null);
+  currentMonitorData.state.isWatering = currentMonitorData.state.isWatering || false;
+
+  renderizarMonitor(currentMonitorData);
+}
+
+function marcarRiegoEnMonitor(deviceId, activo) {
+  if (!currentMonitorPlant || currentMonitorPlant.device_id !== deviceId) return;
+
+  if (currentMonitorData?.state) {
+    currentMonitorData.state.isWatering = activo;
+    actualizarBotonRiego(currentMonitorData.state, currentMonitorData.garden_plant?.plant_type_id?.ideal || null, deviceId);
+  }
+}
+
+function actualizarEstadoMonitorDesdeDispositivos() {
+  if (!currentMonitorPlant) return;
+
+  const device = deviceSnapshot[currentMonitorPlant.device_id];
+  if (!device) return;
+
+  if (currentMonitorData?.state) {
+    currentMonitorData.state.isWatering = Boolean(device.status === 'online' && device.lastReading && device.lastReading.humidity < (currentMonitorData.garden_plant?.plant_type_id?.ideal?.humidity?.min || 0));
+  }
+}
+
+function manejarDispositivosPendientes() {
+  const pendientes = Object.values(deviceSnapshot).filter((device) => device.status === 'pending');
+  if (pendientes.length === 0) {
+    pendingDeviceId = null;
+    pendingAssignmentShown = false;
+    cerrarDialogoAsignacion();
+    return;
+  }
+
+  if (pendingAssignmentShown && pendingDeviceId && pendientes.some((device) => device.device_id === pendingDeviceId)) {
+    return;
+  }
+
+  pendingDeviceId = pendientes[0].device_id;
+  pendingAssignmentShown = true;
+  abrirDialogoAsignacion(pendingDeviceId);
+}
+
+function abrirDialogoAsignacion(deviceId) {
+  let dialogo = document.getElementById('assignPlantDialog');
+  if (!dialogo) {
+    dialogo = crearDialogoAsignacion();
+  }
+
+  const titulo = dialogo.querySelector('[data-role="assign-title"]');
+  const lista = dialogo.querySelector('[data-role="assign-list"]');
+  if (titulo) titulo.textContent = `Asignar planta a ${deviceId}`;
+  if (lista) {
+    lista.replaceChildren();
+
+    if (gardenCache.length === 0) {
+      const empty = document.createElement('p');
+      empty.textContent = 'No tienes plantas en el jardín para asignar.';
+      lista.appendChild(empty);
+    } else {
+      gardenCache.forEach((planta) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'dialog-action dialog-action-primary';
+        button.textContent = obtenerNombreDePlanta(planta);
+        button.addEventListener('click', () => asignarPlantaADevice(deviceId, planta._id));
+        lista.appendChild(button);
+      });
     }
+  }
 
-    huboMigracion = true;
-    return {
-      ...planta,
-      plantId,
-      id: plantId,
-      instanceId: `${slug(plantId)}--legacy-${indice + 1}-${hashTexto(JSON.stringify(planta))}`,
-      createdAt: planta.createdAt || new Date(0).toISOString()
-    };
+  if (dialogo.showModal && !dialogo.open) dialogo.showModal();
+}
+
+function crearDialogoAsignacion() {
+  const dialogo = document.createElement('dialog');
+  dialogo.id = 'assignPlantDialog';
+  dialogo.className = 'plant-actions-dialog';
+
+  const panel = document.createElement('div');
+  panel.className = 'plant-actions-panel';
+
+  const cerrar = document.createElement('button');
+  cerrar.className = 'dialog-close';
+  cerrar.type = 'button';
+  cerrar.textContent = '×';
+  cerrar.addEventListener('click', () => cerrarDialogoAsignacion());
+
+  const eyebrow = document.createElement('p');
+  eyebrow.className = 'section-eyebrow';
+  eyebrow.textContent = 'Módulo pendiente';
+
+  const titulo = document.createElement('h2');
+  titulo.setAttribute('data-role', 'assign-title');
+
+  const lista = document.createElement('div');
+  lista.setAttribute('data-role', 'assign-list');
+  lista.className = 'plant-actions-buttons';
+
+  panel.append(cerrar, eyebrow, titulo, lista);
+  dialogo.appendChild(panel);
+  dialogo.addEventListener('close', () => {
+    pendingAssignmentShown = false;
   });
-
-  if (huboMigracion) guardarPlantas(plantas);
-  return plantas;
+  document.body.appendChild(dialogo);
+  return dialogo;
 }
 
-function guardarPlantas(plantas) {
+function cerrarDialogoAsignacion() {
+  const dialogo = document.getElementById('assignPlantDialog');
+  if (dialogo?.open) dialogo.close();
+}
+
+async function asignarPlantaADevice(deviceId, gardenPlantId) {
   try {
-    localStorage.setItem(SOILSENSE_STORAGE_KEY, JSON.stringify(plantas));
+    enviarComandoWS('ASSIGN_PLANT', {
+      device_id: deviceId,
+      garden_plant_id: gardenPlantId
+    });
+
+    cerrarDialogoAsignacion();
+    pendingAssignmentShown = false;
+    pendingDeviceId = null;
+    await cargarJardin();
   } catch (error) {
-    console.error("No se pudieron guardar las plantas:", error);
+    console.error('Error al asignar planta:', error);
   }
 }
 
-function crearInstanceId(plantId) {
-  const random = Math.random().toString(36).slice(2, 8);
-  return `${slug(plantId)}--${Date.now().toString(36)}-${random}`;
+function mostrarMonitorNoEncontrado(mensaje) {
+  document.getElementById('monitorPlantOverview')?.setAttribute('hidden', '');
+  document.getElementById('monitorContent')?.setAttribute('hidden', '');
+  const noEncontrada = document.getElementById('monitorNotFound');
+  if (noEncontrada) noEncontrada.hidden = false;
+  const subtitle = document.getElementById('monitorHeaderSubtitle');
+  if (subtitle) subtitle.textContent = mensaje;
 }
 
-function slug(texto) {
-  return String(texto)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "planta";
-}
-
-function hashTexto(texto) {
-  let hash = 2166136261;
-  for (let i = 0; i < texto.length; i += 1) {
-    hash ^= texto.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
+function pushHistory(history, value) {
+  const next = Array.isArray(history) ? history.slice() : [];
+  next.push(Number.isFinite(value) ? value : 0);
+  while (next.length > 12) next.shift();
+  return next;
 }
 
 function abreviarInstanceId(instanceId) {
-  if (!instanceId) return "SIN-ID";
+  if (!instanceId) return 'SIN-ID';
   return instanceId.length > 22 ? `${instanceId.slice(0, 10)}…${instanceId.slice(-8)}` : instanceId;
 }
 
@@ -732,18 +952,26 @@ function limitar(valor, minimo, maximo) {
   return Math.max(minimo, Math.min(maximo, valor));
 }
 
+function normalizarTexto(texto) {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 function mostrarToast(mensaje) {
-  let toast = document.querySelector(".soilsense-toast");
+  let toast = document.querySelector('.soilsense-toast');
   if (!toast) {
-    toast = document.createElement("div");
-    toast.className = "soilsense-toast";
-    toast.setAttribute("role", "status");
-    toast.setAttribute("aria-live", "polite");
+    toast = document.createElement('div');
+    toast.className = 'soilsense-toast';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
     document.body.appendChild(toast);
   }
 
   toast.textContent = mensaje;
-  toast.classList.add("visible");
+  toast.classList.add('visible');
   window.clearTimeout(mostrarToast.temporizador);
-  mostrarToast.temporizador = window.setTimeout(() => toast.classList.remove("visible"), 2400);
+  mostrarToast.temporizador = window.setTimeout(() => toast.classList.remove('visible'), 2400);
 }
