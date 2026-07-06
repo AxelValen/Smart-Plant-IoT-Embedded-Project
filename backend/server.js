@@ -232,7 +232,8 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
         device_id: null,
         device_status: 'unassigned',
         window: windowInfo.window,
-        telemetry: crearTelemetriaVacia(windowInfo, 12),
+        // PASAR windowInfo.points en lugar de 12
+        telemetry: crearTelemetriaVacia(windowInfo, windowInfo.points), 
         health: { status: 'desconocido', issues: [], needsWatering: false },
         recommendations: plantType?.ideal || null
       });
@@ -246,8 +247,8 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
 
     const latestReading = readings[readings.length - 1] || null;
     const telemetry = readings.length > 0
-      ? construirTelemetria(readings)
-      : crearTelemetriaVacia(windowInfo, 12);
+      ? construirTelemetria(readings, windowInfo.points)
+      : crearTelemetriaVacia(windowInfo, windowInfo.points);
     const health = evaluateHealth(plantType?.ideal, latestReading || {});
 
     res.json({
@@ -865,15 +866,29 @@ function crearTelemetriaVacia(windowInfo, sampleCount) {
   };
 }
 
-function construirTelemetria(readings) {
+function construirTelemetria(readings, maxPoints = 12) {
+  let sampled = readings;
+
+  // Si hay más lecturas que los puntos que admite la ventana, las muestreamos
+  if (readings.length > maxPoints) {
+    const step = readings.length / maxPoints;
+    sampled = [];
+    for (let i = 0; i < maxPoints; i++) {
+      const index = Math.floor(i * step);
+      sampled.push(readings[index]);
+    }
+    // Nos aseguramos de que el punto final siempre sea la lectura más reciente
+    sampled[maxPoints - 1] = readings[readings.length - 1];
+  }
+
   const latest = readings[readings.length - 1] || {};
   return {
-    timestamps: readings.map(reading => reading.timestamp),
-    humidity: readings.map(reading => reading.humidity ?? 0),
-    temperature: readings.map(reading => reading.temperature ?? 0),
-    nitrogeno: readings.map(reading => reading.nitrogeno ?? 0),
-    fosforo: readings.map(reading => reading.fosforo ?? 0),
-    potasio: readings.map(reading => reading.potasio ?? 0),
+    timestamps: sampled.map(r => r.timestamp),
+    humidity: sampled.map(r => r.humidity ?? 0),
+    temperature: sampled.map(r => r.temperature ?? 0),
+    nitrogeno: sampled.map(r => r.nitrogeno ?? 0),
+    fosforo: sampled.map(r => r.fosforo ?? 0),
+    potasio: sampled.map(r => r.potasio ?? 0),
     latest: {
       humidity: latest.humidity ?? 0,
       temperature: latest.temperature ?? 0,

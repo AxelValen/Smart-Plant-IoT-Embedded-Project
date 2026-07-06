@@ -583,7 +583,9 @@ function renderizarMonitor(data) {
   };
 
   renderizarTodosLosSensores(state);
-  inicializarTooltipDeSensores(state);
+  inicializarTooltipDeSensores();
+  actualizarTooltipAbierto();
+  
   renderizarRecomendaciones(plantType.ideal, health);
   actualizarBotonRiego(state, plantType.ideal, deviceId, deviceStatus);
   actualizarEstadoConexionMonitor(deviceStatus, deviceId);
@@ -676,7 +678,7 @@ function renderizarSensor(key, metrica) {
   if (value) value.textContent = `${Math.round(metrica.value)}%`;
 }
 
-function inicializarTooltipDeSensores(state) {
+function inicializarTooltipDeSensores() {
   const tooltip = document.getElementById('histTooltip');
   if (!tooltip) return;
 
@@ -685,12 +687,12 @@ function inicializarTooltipDeSensores(state) {
 
   document.querySelectorAll('[data-metric]').forEach((elemento) => {
     const key = elemento.dataset.metric;
-    elemento.addEventListener('mouseenter', () => abrirTooltip(key, elemento, state));
+    elemento.addEventListener('mouseenter', () => abrirTooltip(key, elemento));
     elemento.addEventListener('mouseleave', cerrarTooltip);
     elemento.addEventListener('click', (evento) => {
       evento.stopPropagation();
       if (tooltipMetricKey === key) cerrarTooltip();
-      else abrirTooltip(key, elemento, state);
+      else abrirTooltip(key, elemento);
     });
   });
 
@@ -699,7 +701,10 @@ function inicializarTooltipDeSensores(state) {
   });
 }
 
-function abrirTooltip(key, elemento, state) {
+function abrirTooltip(key, elemento) {
+  const state = currentMonitorData?.state;
+  if (!state) return;
+
   const metrica = state.metrics[key];
   const tooltip = document.getElementById('histTooltip');
   if (!metrica || !tooltip) return;
@@ -708,6 +713,11 @@ function abrirTooltip(key, elemento, state) {
   document.getElementById('histTitle').textContent = `Histórico · ${metrica.label}`;
   document.getElementById('histNow').textContent = `${Math.round(metrica.value)}${metrica.unit}`;
   document.getElementById('histSvg').innerHTML = construirSparkline(metrica.history, metrica.color);
+
+  const footElement = tooltip.querySelector('.hist-foot');
+  if (footElement) {
+    footElement.innerHTML = `<span>hace ${metrica.history.length} lecturas</span><span>ahora</span>`;
+  }
 
   const rect = elemento.getBoundingClientRect();
   const width = tooltip.offsetWidth || 260;
@@ -722,10 +732,10 @@ function abrirTooltip(key, elemento, state) {
   tooltip.classList.add('visible');
 }
 
-function actualizarTooltipAbierto(state) {
+function actualizarTooltipAbierto() {
   if (!tooltipMetricKey) return;
   const elemento = document.querySelector(`[data-metric="${tooltipMetricKey}"]`);
-  if (elemento) abrirTooltip(tooltipMetricKey, elemento, state);
+  if (elemento) abrirTooltip(tooltipMetricKey, elemento);
 }
 
 function cerrarTooltip() {
@@ -737,7 +747,15 @@ function construirSparkline(history, color) {
   const width = 260;
   const height = 90;
   const pad = 10;
-  const puntosBase = Array.isArray(history) && history.length > 1 ? history : [0, 0];
+  let puntosBase = [0, 0];
+  if (Array.isArray(history)) {
+    if (history.length > 1) {
+      puntosBase = history;
+    } else if (history.length === 1) {
+      puntosBase = [history[0], history[0]]; // Duplicamos el punto para que el SVG dibuje algo plano
+    }
+  }
+
   const min = Math.min(...puntosBase);
   const max = Math.max(...puntosBase);
   const range = max - min || 1;
@@ -848,12 +866,16 @@ function manejarClickRiego() {
 function actualizarMonitorEnVivo(data) {
   if (!currentMonitorPlant || data.device_id !== currentMonitorPlant.device_id) return;
 
-  const telemetry = currentMonitorData?.telemetry || crearTelemetriaVacia(12);
-  telemetry.humidity = pushHistory(telemetry.humidity, data.humidity);
-  telemetry.temperature = pushHistory(telemetry.temperature, data.temperature);
-  telemetry.nitrogeno = pushHistory(telemetry.nitrogeno, data.nitrogeno);
-  telemetry.fosforo = pushHistory(telemetry.fosforo, data.fosforo);
-  telemetry.potasio = pushHistory(telemetry.potasio, data.potasio);
+  const maxPointsMap = { '1h': 12, '24h': 24, '1w': 28, '1m': 30 };
+  const maxPoints = maxPointsMap[monitorWindowKey] || 12;
+
+  const telemetry = currentMonitorData?.telemetry || crearTelemetriaVacia(maxPoints);
+  
+  telemetry.humidity = pushHistory(telemetry.humidity, data.humidity, maxPoints);
+  telemetry.temperature = pushHistory(telemetry.temperature, data.temperature, maxPoints);
+  telemetry.nitrogeno = pushHistory(telemetry.nitrogeno, data.nitrogeno, maxPoints);
+  telemetry.fosforo = pushHistory(telemetry.fosforo, data.fosforo, maxPoints);
+  telemetry.potasio = pushHistory(telemetry.potasio, data.potasio, maxPoints);
 
   currentMonitorData.telemetry = telemetry;
   currentMonitorData.device_status = deviceSnapshot[data.device_id]?.status || currentMonitorData.device_status || 'online';
@@ -1039,10 +1061,10 @@ function mostrarMonitorNoEncontrado(mensaje) {
   if (subtitle) subtitle.textContent = mensaje;
 }
 
-function pushHistory(history, value) {
+function pushHistory(history, value, maxPoints = 12) {
   const next = Array.isArray(history) ? history.slice() : [];
   next.push(Number.isFinite(value) ? value : 0);
-  while (next.length > 12) next.shift();
+  while (next.length > maxPoints) next.shift();
   return next;
 }
 
