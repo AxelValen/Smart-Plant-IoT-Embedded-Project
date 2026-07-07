@@ -913,6 +913,7 @@ footer {
 /* ---------- Menú de segundo clic ---------- */
 .plant-actions-dialog {
   width: min(28rem, calc(100% - 2rem));
+  margin: auto;
   padding: 0;
   overflow: visible;
   background: transparent;
@@ -1046,6 +1047,44 @@ footer {
   border-radius: 50%;
   box-shadow: 0 0 0 3px rgba(106, 171, 126, 0.28);
   animation: sensorPulse 2s infinite;
+}
+
+.sensor-live-dot[data-status="offline"] {
+  background: #d9534f;
+  box-shadow: 0 0 0 3px rgba(217, 83, 79, 0.28);
+  animation: sensorPulseOffline 2s infinite; 
+}
+
+.sensor-live-dot[data-status="pending"],
+.sensor-live-dot[data-status="unassigned"] {
+  background: var(--muted);
+  box-shadow: none;
+  animation: none;
+}
+
+.live-pill[data-status="offline"] {
+  color: #b83f3f; 
+}
+
+.live-pill[data-status="offline"] .live-pill-dot {
+  background: #d9534f;
+  box-shadow: 0 0 0 3px rgba(217, 83, 79, 0.28);
+  animation: sensorPulseOffline 2s infinite; 
+}
+
+.live-pill[data-status="pending"],
+.live-pill[data-status="unassigned"] {
+  color: var(--muted);
+}
+.live-pill[data-status="pending"] .live-pill-dot,
+.live-pill[data-status="unassigned"] .live-pill-dot {
+  background: var(--muted);
+  box-shadow: none;
+  animation: none;
+}
+
+@keyframes sensorPulseOffline {
+  50% { box-shadow: 0 0 0 7px rgba(217, 83, 79, 0.08); }
 }
 
 @keyframes sensorPulse {
