@@ -21,6 +21,8 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  cargarJardin();
+
   inicializarCarruselPrincipal();
   inicializarCarruselesCatalogo();
   inicializarSeleccionDePlantas();
@@ -353,7 +355,12 @@ function inicializarJardinVirtual() {
   eliminar?.addEventListener('click', async () => {
     if (!currentMonitorPlant) return;
     try {
-      await apiFetch(`/api/garden/${currentMonitorPlant._id}`, { method: 'DELETE' });
+      // Borrar la planta del caché local  
+      // para evitar que el evento WebSocket la atrape en la lista disponible.
+      const idEliminar = currentMonitorPlant._id;
+      gardenCache = gardenCache.filter(p => p._id !== idEliminar);
+
+      await apiFetch(`/api/garden/${idEliminar}`, { method: 'DELETE' });
       currentMonitorPlant = null;
       await cargarJardin();
       if (dialogo?.open) dialogo.close();
@@ -361,14 +368,14 @@ function inicializarJardinVirtual() {
     } catch (error) {
       console.error('Error al eliminar planta:', error);
       mostrarToast('No se pudo eliminar la planta.');
+      // Revertir en caso de fallo
+      cargarJardin();
     }
   });
 
   dialogo?.addEventListener('close', () => {
     currentMonitorPlant = null;
   });
-
-  cargarJardin();
 }
 
 async function cargarJardin() {
@@ -922,7 +929,11 @@ function actualizarEstadoMonitorDesdeDispositivos() {
 }
 
 function manejarDispositivosPendientes() {
-  const pendientes = Object.values(deviceSnapshot).filter((device) => device.status === 'pending');
+  // CAMBIO: Ordenar explícitamente por last_seen (el más antiguo primero)
+  const pendientes = Object.values(deviceSnapshot)
+    .filter((device) => device.status === 'pending' && !sessionStorage.getItem(`ignored_device_${device.device_id}`))
+    .sort((a, b) => (a.last_seen || 0) - (b.last_seen || 0));
+
   if (pendientes.length === 0) {
     pendingDeviceId = null;
     pendingAssignmentShown = false;
@@ -930,7 +941,10 @@ function manejarDispositivosPendientes() {
     return;
   }
 
+  // Si el modal ya está abierto con un módulo válido, no lo sobrescribimos
   if (pendingAssignmentShown && pendingDeviceId && pendientes.some((device) => device.device_id === pendingDeviceId)) {
+    // Actualizamos la lista internamente por si el caché de plantas cambió 
+    renderizarListaDeAsignacion(pendingDeviceId);
     return;
   }
 
@@ -946,15 +960,23 @@ function abrirDialogoAsignacion(deviceId) {
   }
 
   const titulo = dialogo.querySelector('[data-role="assign-title"]');
-  const lista = dialogo.querySelector('[data-role="assign-list"]');
   if (titulo) titulo.textContent = `Asignar planta a ${deviceId}`;
+  renderizarListaDeAsignacion(deviceId);
+  if (dialogo.showModal && !dialogo.open) dialogo.showModal();
+
   if (lista) {
     lista.replaceChildren();
 
     if (gardenCache.length === 0) {
       const empty = document.createElement('p');
-      empty.textContent = 'No tienes plantas en el jardín para asignar.';
+      empty.textContent = 'Agrega plantas a tu jardín para asignarlas al módulo.';
       lista.appendChild(empty);
+
+      const abrirCatalogo = document.createElement('a');
+      abrirCatalogo.className = 'dialog-action dialog-action-primary';
+      abrirCatalogo.href = 'addplant.html';
+      abrirCatalogo.textContent = 'Agregar plantas';
+      lista.appendChild(abrirCatalogo);
     } else {
       gardenCache.forEach((planta) => {
         const button = document.createElement('button');
@@ -968,6 +990,40 @@ function abrirDialogoAsignacion(deviceId) {
   }
 
   if (dialogo.showModal && !dialogo.open) dialogo.showModal();
+}
+
+function renderizarListaDeAsignacion(deviceId) {
+  const dialogo = document.getElementById('assignPlantDialog');
+  if (!dialogo) return;
+  
+  const lista = dialogo.querySelector('[data-role="assign-list"]');
+  if (!lista) return;
+  
+  lista.replaceChildren();
+
+  // CAMBIO: Filtrar el caché para mostrar SOLO las plantas que no tienen un módulo asignado
+  const plantasDisponibles = gardenCache.filter(planta => !planta.device_id);
+
+  if (plantasDisponibles.length === 0) {
+    const empty = document.createElement('p');
+    empty.textContent = 'Agrega plantas a tu jardín para asignarlas al módulo.';
+    lista.appendChild(empty);
+    
+    const abrirCatalogo = document.createElement('a');
+    abrirCatalogo.className = 'dialog-action dialog-action-primary';
+    abrirCatalogo.href = 'addplant.html';
+    abrirCatalogo.textContent = 'Agregar plantas';
+    lista.appendChild(abrirCatalogo);
+  } else {
+    plantasDisponibles.forEach((planta) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'dialog-action dialog-action-primary';
+      button.textContent = obtenerNombreDePlanta(planta);
+      button.addEventListener('click', () => asignarPlantaADevice(deviceId, planta._id));
+      lista.appendChild(button);
+    });
+  }
 }
 
 function crearDialogoAsignacion() {
@@ -1043,6 +1099,11 @@ function actualizarEstadoConexionMonitor(status, deviceId) {
 
   livePill.dataset.status = status || 'unassigned';
   livePill.innerHTML = `<span class="live-pill-dot"></span>${obtenerEtiquetaEstado(status, deviceId)}`;
+
+  const sensorDots = document.querySelectorAll('.sensor-live-dot');
+  sensorDots.forEach(dot => {
+    dot.dataset.status = status || 'unassigned';
+  });
 }
 
 function obtenerEtiquetaEstado(status, deviceId) {

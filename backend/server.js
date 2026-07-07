@@ -942,7 +942,7 @@ setInterval(() => {
   
   devices.forEach((device, deviceID) => {
     // Si han pasado más de 5 segundos sin telemetría, se declara offline
-    if (device.status === 'online' && device.last_seen && (now - device.last_seen > 5000)) {
+    if (device.status !== 'offline' && device.last_seen && (now - device.last_seen > 5000)) {
       device.status = 'offline';
       changed = true;
       console.log(`🔌 Módulo ${deviceID} desconectado (Timeout)`);
