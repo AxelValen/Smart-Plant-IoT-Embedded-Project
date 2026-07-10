@@ -12,7 +12,7 @@ const int MQTT_PORT = SECRET_MQTT_PORT;
 const char* MQTT_USERNAME = SECRET_MQTT_USER;
 const char* MQTT_PASSWORD = SECRET_MQTT_PASS;
 
-const int PIN_BOMBA = 2; // cambiar a 19 cuando se tenga el rele conectado
+const int PIN_BOMBA = 19; // cambiar a 19 cuando se tenga el rele conectado
 
 String deviceID;
 String topicData;

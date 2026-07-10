@@ -8,7 +8,7 @@ const float SUELO_HUMEDO = 650.0;
 const float ALPHA        = -0.0046;
 const float T_REF        = 25.0;
 
-const int PIN_BOMBA      = 2; // cambiar a 19 cuando se tenga el rele conectado
+const int PIN_BOMBA      = 19; // cambiar a 19 cuando se tenga el rele conectado
 const int HUMEDAD_INICIO = 30;
 const int HUMEDAD_STOP   = 100;
 
@@ -19,7 +19,6 @@ HardwareSerial mod(2); // UART2: RX=16, TX=17
 const byte nitro[] = {0x01, 0x03, 0x00, 0x1e, 0x00, 0x01, 0xe4, 0x0c};
 const byte phos[]  = {0x01, 0x03, 0x00, 0x1f, 0x00, 0x01, 0xb5, 0xcc};
 const byte pota[]  = {0x01, 0x03, 0x00, 0x20, 0x00, 0x01, 0x85, 0xc0};
-byte values[11];
 
 float leerCapacitanciaPromedio() {
   float suma = 0;
@@ -44,26 +43,53 @@ int calcularHumedad(float capCorregida) {
 }
 
 byte leerNPK(const byte* comando, size_t len) {
-  while (mod.available()) mod.read(); // Limpiar buffer
+  // Limpiar buffer de lecturas residuales
+  while (mod.available()) {
+    mod.read();
+  }
 
+  // Activar transmisión
   digitalWrite(DE, HIGH);
   digitalWrite(RE, HIGH);
-  delay(10);
+  delayMicroseconds(200);
 
   mod.write(comando, len);
   mod.flush();
+  
+  // Pequeño margen para asegurar que el último bit salió
+  delayMicroseconds(1000);
 
+  // Cambiar a recepción
   digitalWrite(DE, LOW);
   digitalWrite(RE, LOW);
-  delay(50);
   
-  if (mod.available() >= 7) {
-    for (byte i = 0; i < 7; i++) {
-      values[i] = mod.read();
+  byte response[7];
+  byte index = 0;
+  unsigned long startTime = millis();
+
+  // Esperar respuesta (timeout de 500ms)
+  while ((millis() - startTime) < 500 && index < 7) {
+    if (mod.available()) {
+      byte incomingByte = mod.read();
+      
+      // Filtro de sincronización: ignorar el byte fantasma (0x00)
+      if (index == 0 && incomingByte != 0x01) {
+        continue; 
+      }
+      
+      response[index] = incomingByte;
+      index++;
     }
-    uint16_t dato = (values[3] << 8) | values[4];
+  }
+  
+  // Validar que llegaron los 7 bytes y la cabecera es correcta
+  if (index == 7 && response[0] == 0x01 && response[1] == 0x03 && response[2] == 0x02) {
+    // Combinar byte alto y bajo
+    uint16_t dato = (response[3] << 8) | response[4];
     return (byte)dato;
   }
+  
+  // Retornar 0 si hubo error o timeout
   return 0;
 }
 
@@ -73,8 +99,10 @@ void setupHardware() {
 
   pinMode(RE, OUTPUT);
   pinMode(DE, OUTPUT);
+  // Iniciar en modo recepción por defecto
   digitalWrite(RE, LOW);
   digitalWrite(DE, LOW);
+  
   mod.begin(9600, SERIAL_8N1, 16, 17);
 
   if (!ss.begin(0x36)) {
@@ -97,21 +125,19 @@ void processHumidity_Temp(int &humedadOut, int &tempOut) {
   Serial.print("Capacitancia corr: "); Serial.println(capCorregida);
   Serial.print("Humedad del suelo: "); Serial.print(humidity); Serial.println(" %");
   
-  // Asignamos los valores de prueba a las salidas para testing
-  // Cuando se conecte el sensor, cambiar a: humedadOut = humidity; tempOut = (int)tempC;
-  humedadOut = random(50,100); 
-  tempOut = random(20,40);
+  humedadOut = humidity; 
+  tempOut = (int)tempC;
 }
 
 void readNPKValues(byte &n, byte &p, byte &k) {
   n = leerNPK(nitro, sizeof(nitro));
-  delay(250); 
+  delay(300); 
   p = leerNPK(phos, sizeof(phos));
-  delay(250);
+  delay(300);
   k = leerNPK(pota, sizeof(pota));
   
   Serial.println("-----------------------------");
-    Serial.print("Nitrogeno:  "); Serial.print(n); Serial.println(" mg/kg");
-    Serial.print("Fosforo:    "); Serial.print(p); Serial.println(" mg/kg");
-    Serial.print("Potasio:    "); Serial.print(k); Serial.println(" mg/kg");
+  Serial.print("Nitrogeno:  "); Serial.print(n); Serial.println(" mg/kg");
+  Serial.print("Fosforo:    "); Serial.print(p); Serial.println(" mg/kg");
+  Serial.print("Potasio:    "); Serial.print(k); Serial.println(" mg/kg");
 }
