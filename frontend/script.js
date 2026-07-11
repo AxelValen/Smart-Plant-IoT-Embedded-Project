@@ -14,6 +14,8 @@ let monitorWindowKey = '24h';
 let sensorChartInstance = null;
 let sensorChartMetrics = null; // claves de telemetry actualmente graficadas, ej. ['temperature']
 let sensorChartButtonsBound = false;
+let sensorChartRenderedMetrics = null;   // métricas con las que se construyó/actualizó el chart actual
+let sensorChartRenderedWindowKey = null; // ventana (1h/24h/1w/1m) de los datos actualmente pintados
 
 const SENSOR_CHART_META = {
   temperature: { label: 'Temperatura del suelo', unit: '°C', color: '#c0573a' },
@@ -723,6 +725,8 @@ function inicializarBotonesDeGrafica() {
   document.getElementById('chartModalClose')?.addEventListener('click', () => dialogo?.close());
   dialogo?.addEventListener('close', () => {
     sensorChartMetrics = null;
+    sensorChartRenderedMetrics = null;
+    sensorChartRenderedWindowKey = null;
     if (sensorChartInstance) {
       sensorChartInstance.destroy();
       sensorChartInstance = null;
@@ -746,14 +750,8 @@ function actualizarGraficaAbierta() {
   if (dialogo?.open && sensorChartMetrics) renderizarGraficaDeSensor();
 }
 
-function renderizarGraficaDeSensor() {
-  const canvas = document.getElementById('sensorChart');
-  if (!canvas || !sensorChartMetrics || typeof Chart === 'undefined') return;
-
-  const telemetry = currentMonitorData?.telemetry || {};
-  const timestamps = Array.isArray(telemetry.timestamps) ? telemetry.timestamps : [];
-
-  const datasets = sensorChartMetrics.map((key) => {
+function construirDatasetsDeGrafica(telemetry, timestamps) {
+  return sensorChartMetrics.map((key) => {
     const meta = SENSOR_CHART_META[key] || { label: key, unit: '', color: '#4a7c59' };
     const valores = Array.isArray(telemetry[key]) ? telemetry[key] : [];
     const total = Math.min(timestamps.length, valores.length);
@@ -772,11 +770,46 @@ function renderizarGraficaDeSensor() {
       spanGaps: true
     };
   });
+}
 
-  if (sensorChartInstance) {
+function renderizarGraficaDeSensor() {
+  const canvas = document.getElementById('sensorChart');
+  if (!canvas || !sensorChartMetrics || typeof Chart === 'undefined') return;
+
+  const telemetry = currentMonitorData?.telemetry || {};
+  const timestamps = Array.isArray(telemetry.timestamps) ? telemetry.timestamps : [];
+
+  // Usamos la ventana con la que REALMENTE llegó este telemetry
+  // (currentMonitorData.window, que solo cambia cuando el fetch de esa
+  // ventana ya se resolvió) en vez de la variable global monitorWindowKey
+  // (que se actualiza de inmediato al tocar el selector, antes de que
+  // lleguen los datos). Así evitamos comparar contra un estado "adelantado".
+  const windowActual = currentMonitorData?.window || monitorWindowKey;
+
+  const mismaGrafica = Boolean(sensorChartInstance)
+    && arraysIguales(sensorChartMetrics, sensorChartRenderedMetrics)
+    && sensorChartRenderedWindowKey === windowActual;
+
+  const datasets = construirDatasetsDeGrafica(telemetry, timestamps);
+
+  if (mismaGrafica) {
+    // Misma ventana y mismas métricas: refrescamos los datos del chart
+    // existente SIN animación ('none'). No importa si el origen es una
+    // lectura en vivo (1 punto nuevo) o el refresco de 10s (histórico
+    // completo de nuevo): al no animar, no hay "parpadeo" ni reinicio
+    // visible en ningún caso, y el eje de tiempo se recalcula igual.
     sensorChartInstance.data.datasets = datasets;
-    sensorChartInstance.update();
+    sensorChartInstance.update('none');
+    sensorChartRenderedWindowKey = windowActual;
     return;
+  }
+
+  // Cambió la ventana o las métricas (o es la primera vez que se abre):
+  // reconstruimos el chart desde cero para que el eje de tiempo arranque
+  // limpio, con una animación de entrada normal.
+  if (sensorChartInstance) {
+    sensorChartInstance.destroy();
+    sensorChartInstance = null;
   }
 
   sensorChartInstance = new Chart(canvas.getContext('2d'), {
@@ -785,6 +818,7 @@ function renderizarGraficaDeSensor() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      animation: { duration: 300 },
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: {
@@ -799,6 +833,14 @@ function renderizarGraficaDeSensor() {
       }
     }
   });
+
+  sensorChartRenderedMetrics = sensorChartMetrics.slice();
+  sensorChartRenderedWindowKey = windowActual;
+}
+
+function arraysIguales(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  return a.every((valor, indice) => valor === b[indice]);
 }
 
 function renderizarRecomendaciones(ideal, health) {
