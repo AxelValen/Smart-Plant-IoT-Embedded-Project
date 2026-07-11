@@ -7,10 +7,21 @@ let pendingDeviceId = null;
 let pendingAssignmentShown = false;
 let currentMonitorPlant = null;
 let currentMonitorData = null;
-let tooltipMetricKey = null;
-let tooltipListenersBound = false;
 let monitorRefreshTimer = null;
 let monitorWindowKey = '24h';
+
+// --- Gráfica histórica del monitor (Chart.js) ---
+let sensorChartInstance = null;
+let sensorChartMetrics = null; // claves de telemetry actualmente graficadas, ej. ['temperature']
+let sensorChartButtonsBound = false;
+
+const SENSOR_CHART_META = {
+  temperature: { label: 'Temperatura del suelo', unit: '°C', color: '#c0573a' },
+  humidity: { label: 'Humedad / nivel de agua', unit: '%', color: '#4a90d9' },
+  nitrogeno: { label: 'Nitrógeno (N)', unit: '%', color: '#4a7c59' },
+  fosforo: { label: 'Fósforo (P)', unit: '%', color: '#c79a35' },
+  potasio: { label: 'Potasio (K)', unit: '%', color: '#7a63ad' }
+};
 
 window.logout = logout;
 
@@ -551,7 +562,7 @@ function renderizarMonitor(data) {
 
   const gardenPlant = data.garden_plant || currentMonitorPlant;
   const plantType = gardenPlant?.plant_type_id || {};
-  const telemetry = data.telemetry || crearTelemetriaVacia(12);
+  const telemetry = data.telemetry || crearTelemetriaVacia();
   const health = data.health || { status: 'desconocido', issues: [], needsWatering: false };
   const deviceId = gardenPlant?.device_id || null;
   const deviceStatus = data.device_status || (deviceId ? (deviceSnapshot[deviceId]?.status || 'offline') : 'unassigned');
@@ -590,9 +601,9 @@ function renderizarMonitor(data) {
   };
 
   renderizarTodosLosSensores(state);
-  inicializarTooltipDeSensores();
-  actualizarTooltipAbierto();
-  
+  inicializarBotonesDeGrafica();
+  actualizarGraficaAbierta();
+
   renderizarRecomendaciones(plantType.ideal, health);
   actualizarBotonRiego(state, plantType.ideal, deviceId, deviceStatus);
   actualizarEstadoConexionMonitor(deviceStatus, deviceId);
@@ -602,13 +613,14 @@ function renderizarMonitor(data) {
   }
 }
 
-function crearTelemetriaVacia(sampleCount = 12) {
+function crearTelemetriaVacia() {
   return {
-    humidity: Array(sampleCount).fill(0),
-    temperature: Array(sampleCount).fill(0),
-    nitrogeno: Array(sampleCount).fill(0),
-    fosforo: Array(sampleCount).fill(0),
-    potasio: Array(sampleCount).fill(0)
+    timestamps: [],
+    humidity: [],
+    temperature: [],
+    nitrogeno: [],
+    fosforo: [],
+    potasio: []
   };
 }
 
@@ -685,104 +697,99 @@ function renderizarSensor(key, metrica) {
   if (value) value.textContent = `${Math.round(metrica.value)}%`;
 }
 
-function inicializarTooltipDeSensores() {
-  const tooltip = document.getElementById('histTooltip');
-  if (!tooltip) return;
+function inicializarBotonesDeGrafica() {
+  if (sensorChartButtonsBound) return;
+  sensorChartButtonsBound = true;
 
-  if (tooltipListenersBound) return;
-  tooltipListenersBound = true;
-
-  document.querySelectorAll('[data-metric]').forEach((elemento) => {
-    const key = elemento.dataset.metric;
-    elemento.addEventListener('mouseenter', () => abrirTooltip(key, elemento));
-    elemento.addEventListener('mouseleave', cerrarTooltip);
-    elemento.addEventListener('click', (evento) => {
+  document.querySelectorAll('.btn-chart').forEach((boton) => {
+    boton.addEventListener('click', (evento) => {
       evento.stopPropagation();
-      if (tooltipMetricKey === key) cerrarTooltip();
-      else abrirTooltip(key, elemento);
+      const metrics = (boton.dataset.chartMetrics || '').split(',').map((m) => m.trim()).filter(Boolean);
+      if (metrics.length === 0) return;
+      abrirGraficaDeSensor(metrics, boton.dataset.chartLabel || 'Histórico');
     });
   });
 
-  document.addEventListener('click', (evento) => {
-    if (!evento.target.closest('[data-metric]') && !evento.target.closest('.hist-tooltip')) cerrarTooltip();
-  });
-}
-
-function abrirTooltip(key, elemento) {
-  const state = currentMonitorData?.state;
-  if (!state) return;
-
-  const metrica = state.metrics[key];
-  const tooltip = document.getElementById('histTooltip');
-  if (!metrica || !tooltip) return;
-
-  tooltipMetricKey = key;
-  document.getElementById('histTitle').textContent = `Histórico · ${metrica.label}`;
-  document.getElementById('histNow').textContent = `${Math.round(metrica.value)}${metrica.unit}`;
-  document.getElementById('histSvg').innerHTML = construirSparkline(metrica.history, metrica.color);
-
-  const footElement = tooltip.querySelector('.hist-foot');
-  if (footElement) {
-    footElement.innerHTML = `<span>hace ${metrica.history.length} lecturas</span><span>ahora</span>`;
-  }
-
-  const rect = elemento.getBoundingClientRect();
-  const width = tooltip.offsetWidth || 260;
-  const height = tooltip.offsetHeight || 150;
-  let left = rect.left + rect.width / 2 - width / 2;
-  left = limitar(left, 10, window.innerWidth - width - 10);
-  let top = rect.top - height - 14;
-  if (top < 10) top = rect.bottom + 14;
-
-  tooltip.style.left = `${left}px`;
-  tooltip.style.top = `${top}px`;
-  tooltip.classList.add('visible');
-}
-
-function actualizarTooltipAbierto() {
-  if (!tooltipMetricKey) return;
-  const elemento = document.querySelector(`[data-metric="${tooltipMetricKey}"]`);
-  if (elemento) abrirTooltip(tooltipMetricKey, elemento);
-}
-
-function cerrarTooltip() {
-  tooltipMetricKey = null;
-  document.getElementById('histTooltip')?.classList.remove('visible');
-}
-
-function construirSparkline(history, color) {
-  const width = 260;
-  const height = 90;
-  const pad = 10;
-  let puntosBase = [0, 0];
-  if (Array.isArray(history)) {
-    if (history.length > 1) {
-      puntosBase = history;
-    } else if (history.length === 1) {
-      puntosBase = [history[0], history[0]]; // Duplicamos el punto para que el SVG dibuje algo plano
+  const dialogo = document.getElementById('chartModal');
+  document.getElementById('chartModalClose')?.addEventListener('click', () => dialogo?.close());
+  dialogo?.addEventListener('close', () => {
+    sensorChartMetrics = null;
+    if (sensorChartInstance) {
+      sensorChartInstance.destroy();
+      sensorChartInstance = null;
     }
-  }
+  });
+}
 
-  const min = Math.min(...puntosBase);
-  const max = Math.max(...puntosBase);
-  const range = max - min || 1;
-  const step = (width - pad * 2) / (puntosBase.length - 1);
+function abrirGraficaDeSensor(metrics, titulo) {
+  const dialogo = document.getElementById('chartModal');
+  if (!dialogo) return;
 
-  const puntos = puntosBase.map((valor, indice) => {
-    const x = pad + indice * step;
-    const y = pad + (1 - (valor - min) / range) * (height - pad * 2);
-    return [x, y];
+  sensorChartMetrics = metrics;
+  document.getElementById('chartModalTitle').textContent = titulo;
+
+  if (dialogo.showModal && !dialogo.open) dialogo.showModal();
+  renderizarGraficaDeSensor();
+}
+
+function actualizarGraficaAbierta() {
+  const dialogo = document.getElementById('chartModal');
+  if (dialogo?.open && sensorChartMetrics) renderizarGraficaDeSensor();
+}
+
+function renderizarGraficaDeSensor() {
+  const canvas = document.getElementById('sensorChart');
+  if (!canvas || !sensorChartMetrics || typeof Chart === 'undefined') return;
+
+  const telemetry = currentMonitorData?.telemetry || {};
+  const timestamps = Array.isArray(telemetry.timestamps) ? telemetry.timestamps : [];
+
+  const datasets = sensorChartMetrics.map((key) => {
+    const meta = SENSOR_CHART_META[key] || { label: key, unit: '', color: '#4a7c59' };
+    const valores = Array.isArray(telemetry[key]) ? telemetry[key] : [];
+    const total = Math.min(timestamps.length, valores.length);
+    const data = [];
+    for (let i = 0; i < total; i += 1) {
+      data.push({ x: timestamps[i], y: valores[i] });
+    }
+    return {
+      label: meta.unit ? `${meta.label} (${meta.unit})` : meta.label,
+      data,
+      borderColor: meta.color,
+      backgroundColor: `${meta.color}33`,
+      fill: sensorChartMetrics.length === 1,
+      tension: 0.3,
+      pointRadius: 2,
+      spanGaps: true
+    };
   });
 
-  const line = puntos.map((punto) => punto.join(',')).join(' ');
-  const area = `${pad},${height - pad} ${line} ${width - pad},${height - pad}`;
-  const ultimo = puntos[puntos.length - 1];
+  if (sensorChartInstance) {
+    sensorChartInstance.data.datasets = datasets;
+    sensorChartInstance.update();
+    return;
+  }
 
-  return `
-    <polygon points="${area}" fill="${color}" opacity="0.15"></polygon>
-    <polyline points="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>
-    <circle cx="${ultimo[0]}" cy="${ultimo[1]}" r="4" fill="${color}" stroke="#ffffff" stroke-width="1.5"></circle>
-  `;
+  sensorChartInstance = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          type: 'time',
+          time: { tooltipFormat: 'dd/MM/yyyy HH:mm' },
+          ticks: { maxRotation: 0, autoSkip: true }
+        },
+        y: { beginAtZero: false }
+      },
+      plugins: {
+        legend: { display: sensorChartMetrics.length > 1 }
+      }
+    }
+  });
 }
 
 function renderizarRecomendaciones(ideal, health) {
@@ -873,16 +880,16 @@ function manejarClickRiego() {
 function actualizarMonitorEnVivo(data) {
   if (!currentMonitorPlant || data.device_id !== currentMonitorPlant.device_id) return;
 
-  const maxPointsMap = { '1h': 12, '24h': 24, '1w': 28, '1m': 30 };
-  const maxPoints = maxPointsMap[monitorWindowKey] || 12;
+  const telemetry = currentMonitorData?.telemetry || crearTelemetriaVacia();
 
-  const telemetry = currentMonitorData?.telemetry || crearTelemetriaVacia(maxPoints);
-  
-  telemetry.humidity = pushHistory(telemetry.humidity, data.humidity, maxPoints);
-  telemetry.temperature = pushHistory(telemetry.temperature, data.temperature, maxPoints);
-  telemetry.nitrogeno = pushHistory(telemetry.nitrogeno, data.nitrogeno, maxPoints);
-  telemetry.fosforo = pushHistory(telemetry.fosforo, data.fosforo, maxPoints);
-  telemetry.potasio = pushHistory(telemetry.potasio, data.potasio, maxPoints);
+  // Sin límite de puntos: el próximo refresco (cada 10s) trae de nuevo la
+  // resolución completa desde el backend y reemplaza este telemetry local.
+  telemetry.timestamps = pushHistory(telemetry.timestamps, data.timestamp || new Date().toISOString());
+  telemetry.humidity = pushHistory(telemetry.humidity, data.humidity);
+  telemetry.temperature = pushHistory(telemetry.temperature, data.temperature);
+  telemetry.nitrogeno = pushHistory(telemetry.nitrogeno, data.nitrogeno);
+  telemetry.fosforo = pushHistory(telemetry.fosforo, data.fosforo);
+  telemetry.potasio = pushHistory(telemetry.potasio, data.potasio);
 
   currentMonitorData.telemetry = telemetry;
   currentMonitorData.device_status = deviceSnapshot[data.device_id]?.status || currentMonitorData.device_status || 'online';
@@ -1122,10 +1129,9 @@ function mostrarMonitorNoEncontrado(mensaje) {
   if (subtitle) subtitle.textContent = mensaje;
 }
 
-function pushHistory(history, value, maxPoints = 12) {
+function pushHistory(history, value) {
   const next = Array.isArray(history) ? history.slice() : [];
-  next.push(Number.isFinite(value) ? value : 0);
-  while (next.length > maxPoints) next.shift();
+  next.push(typeof value === 'string' ? value : (Number.isFinite(value) ? value : 0));
   return next;
 }
 

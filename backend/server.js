@@ -232,8 +232,7 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
         device_id: null,
         device_status: 'unassigned',
         window: windowInfo.window,
-        // PASAR windowInfo.points en lugar de 12
-        telemetry: crearTelemetriaVacia(windowInfo, windowInfo.points), 
+        telemetry: crearTelemetriaVacia(),
         health: { status: 'desconocido', issues: [], needsWatering: false },
         recommendations: plantType?.ideal || null
       });
@@ -247,8 +246,8 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
 
     const latestReading = readings[readings.length - 1] || null;
     const telemetry = readings.length > 0
-      ? construirTelemetria(readings, windowInfo.points)
-      : crearTelemetriaVacia(windowInfo, windowInfo.points);
+      ? construirTelemetria(readings)
+      : crearTelemetriaVacia();
     const health = evaluateHealth(plantType?.ideal, latestReading || {});
 
     res.json({
@@ -831,10 +830,10 @@ function inferIdealForCatalog(catalogLabel) {
 function obtenerVentanaDeHistorial(windowParam) {
   const windowKey = ['1h', '24h', '1w', '1m'].includes(String(windowParam)) ? String(windowParam) : '1h';
   const ranges = {
-    '1h': { hours: 1, points: 12 },
-    '24h': { hours: 24, points: 24 },
-    '1w': { days: 7, points: 28 },
-    '1m': { days: 30, points: 30 }
+    '1h': { hours: 1 },
+    '24h': { hours: 24 },
+    '1w': { days: 7 },
+    '1m': { days: 30 }
   };
 
   const config = ranges[windowKey];
@@ -844,18 +843,17 @@ function obtenerVentanaDeHistorial(windowParam) {
   if (config.hours) from.setHours(from.getHours() - config.hours);
   if (config.days) from.setDate(from.getDate() - config.days);
 
-  return { window: windowKey, from, to, points: config.points };
+  return { window: windowKey, from, to };
 }
 
-function crearTelemetriaVacia(windowInfo, sampleCount) {
-  const timestamps = crearMarcaDeTiempoVentana(windowInfo.from, windowInfo.to, sampleCount);
+function crearTelemetriaVacia() {
   return {
-    timestamps,
-    humidity: Array(sampleCount).fill(0),
-    temperature: Array(sampleCount).fill(0),
-    nitrogeno: Array(sampleCount).fill(0),
-    fosforo: Array(sampleCount).fill(0),
-    potasio: Array(sampleCount).fill(0),
+    timestamps: [],
+    humidity: [],
+    temperature: [],
+    nitrogeno: [],
+    fosforo: [],
+    potasio: [],
     latest: {
       humidity: 0,
       temperature: 0,
@@ -866,29 +864,17 @@ function crearTelemetriaVacia(windowInfo, sampleCount) {
   };
 }
 
-function construirTelemetria(readings, maxPoints = 12) {
-  let sampled = readings;
-
-  // Si hay más lecturas que los puntos que admite la ventana, las muestreamos
-  if (readings.length > maxPoints) {
-    const step = readings.length / maxPoints;
-    sampled = [];
-    for (let i = 0; i < maxPoints; i++) {
-      const index = Math.floor(i * step);
-      sampled.push(readings[index]);
-    }
-    // Nos aseguramos de que el punto final siempre sea la lectura más reciente
-    sampled[maxPoints - 1] = readings[readings.length - 1];
-  }
-
+function construirTelemetria(readings) {
+  // Se devuelve la resolución completa de lecturas disponibles en el rango,
+  // sin submuestreo: el frontend decide cómo graficarlas.
   const latest = readings[readings.length - 1] || {};
   return {
-    timestamps: sampled.map(r => r.timestamp),
-    humidity: sampled.map(r => r.humidity ?? 0),
-    temperature: sampled.map(r => r.temperature ?? 0),
-    nitrogeno: sampled.map(r => r.nitrogeno ?? 0),
-    fosforo: sampled.map(r => r.fosforo ?? 0),
-    potasio: sampled.map(r => r.potasio ?? 0),
+    timestamps: readings.map(r => r.timestamp),
+    humidity: readings.map(r => r.humidity ?? 0),
+    temperature: readings.map(r => r.temperature ?? 0),
+    nitrogeno: readings.map(r => r.nitrogeno ?? 0),
+    fosforo: readings.map(r => r.fosforo ?? 0),
+    potasio: readings.map(r => r.potasio ?? 0),
     latest: {
       humidity: latest.humidity ?? 0,
       temperature: latest.temperature ?? 0,
@@ -897,22 +883,6 @@ function construirTelemetria(readings, maxPoints = 12) {
       potasio: latest.potasio ?? 0
     }
   };
-}
-
-function crearMarcaDeTiempoVentana(from, to, sampleCount) {
-  if (sampleCount <= 1) {
-    return [to.toISOString()];
-  }
-
-  const points = [];
-  const span = to.getTime() - from.getTime();
-
-  for (let index = 0; index < sampleCount; index += 1) {
-    const ratio = index / (sampleCount - 1);
-    points.push(new Date(from.getTime() + span * ratio).toISOString());
-  }
-
-  return points;
 }
 
 function obtenerUserIdDesdeToken(token) {

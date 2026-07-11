@@ -11,6 +11,8 @@
   <link rel="stylesheet" href="style.css">
 
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.3.1/model-viewer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
 <body>
   <nav class="navbar">
@@ -61,7 +63,7 @@
           <h2>Condiciones del suelo</h2>
         </div>
         <label class="window-selector" for="monitorWindowSelect">
-          Elige la ventana de monitoreo. Pasa el cursor por una medición para ver su historial.
+          Elige la ventana de monitoreo. Usa "Ver gráfica" en una tarjeta para ver su historial.
           <select id="monitorWindowSelect">
             <option value="1h">1 hora</option>
             <option value="24h" selected>24 horas</option>
@@ -85,6 +87,7 @@
             </div>
           </div>
           <p class="sensor-value" id="tempValue">--°C</p>
+          <button type="button" class="btn-chart" data-chart-metrics="temperature" data-chart-label="Temperatura del suelo">Ver gráfica</button>
         </article>
 
         <article class="sensor-card" data-metric="humedad">
@@ -100,6 +103,7 @@
             </div>
           </div>
           <p class="sensor-value" id="humValue">--%</p>
+          <button type="button" class="btn-chart" data-chart-metrics="humidity" data-chart-label="Humedad / nivel de agua">Ver gráfica</button>
         </article>
 
         <article class="sensor-card">
@@ -119,6 +123,7 @@
               <div class="npk-label">K <span id="kValue">--%</span></div>
             </div>
           </div>
+          <button type="button" class="btn-chart" data-chart-metrics="nitrogeno,fosforo,potasio" data-chart-label="Nutrientes NPK">Ver gráfica</button>
         </article>
       </div>
 
@@ -155,14 +160,16 @@
     </section>
   </main>
 
-  <div class="hist-tooltip" id="histTooltip">
-    <div class="hist-head">
-      <span id="histTitle">Histórico</span>
-      <span id="histNow">--</span>
+  <dialog id="chartModal" class="chart-dialog">
+    <div class="chart-panel">
+      <button type="button" class="dialog-close" id="chartModalClose">×</button>
+      <p class="section-eyebrow">Histórico</p>
+      <h2 id="chartModalTitle">Sensor</h2>
+      <div class="chart-canvas-wrap">
+        <canvas id="sensorChart"></canvas>
+      </div>
     </div>
-    <svg id="histSvg" viewBox="0 0 260 110" preserveAspectRatio="none"></svg>
-    <div class="hist-foot"><span>hace 12 lecturas</span><span>ahora</span></div>
-  </div>
+  </dialog>
 
   <footer>Smart-Plant — Sistema IoT de Monitoreo de Suelo</footer>
   <script src="script.js"></script>
