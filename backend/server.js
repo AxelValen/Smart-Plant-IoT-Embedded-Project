@@ -234,7 +234,8 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
         window: windowInfo.window,
         telemetry: crearTelemetriaVacia(),
         health: { status: 'desconocido', issues: [], needsWatering: false },
-        recommendations: plantType?.ideal || null
+        recommendations: plantType?.ideal || null,
+        watering_events: [] 
       });
     }
 
@@ -244,11 +245,19 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
       timestamp: { $gte: windowInfo.from }
     }).sort({ timestamp: 1 }).lean();
 
-    const latestReading = readings[readings.length - 1] || null;
-    const telemetry = readings.length > 0
+    // Buscar eventos de riego en la ventana de tiempo seleccionada
+    const wateringEvents = await WateringEvent.find({
+      device_id: deviceID,
+      timestamp: { $gte: windowInfo.from }
+    }).sort({ timestamp: -1 }).lean(); 
+
+    // Validación segura para evitar que crashee si readings está vacío
+    const latestReading = readings && readings.length > 0 ? readings[readings.length - 1] : {};
+    const telemetry = readings && readings.length > 0
       ? construirTelemetria(readings)
       : crearTelemetriaVacia();
-    const health = evaluateHealth(plantType?.ideal, latestReading || {});
+      
+    const health = evaluateHealth(plantType?.ideal || null, latestReading);
 
     res.json({
       garden_plant: serializarGardenPlant(gardenPlant),
@@ -257,7 +266,8 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
       window: windowInfo.window,
       telemetry,
       health,
-      recommendations: plantType?.ideal || null
+      recommendations: plantType?.ideal || null,
+      watering_events: wateringEvents || []
     });
   } catch (err) {
     console.error('❌ Error al obtener monitor:', err.message);

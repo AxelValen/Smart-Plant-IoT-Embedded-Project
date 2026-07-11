@@ -136,6 +136,25 @@
           <button class="watering-button" id="wateringButton" type="button">
             💧 Activar riego
           </button>
+          
+          <!-- Nuevo bloque de historial de riego -->
+          <div class="watering-history">
+            <p class="watering-history-title">Historial de eventos de regado</p>
+            <div class="watering-table-wrap">
+              <table class="watering-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Duración</th>
+                  </tr>
+                </thead>
+                <tbody id="wateringHistoryBody">
+                  <tr><td colspan="3" class="watering-empty">Cargando eventos...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
 
         <div class="recommendations-card">

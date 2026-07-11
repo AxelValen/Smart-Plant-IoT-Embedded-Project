@@ -128,11 +128,19 @@ function manejarMensajeWebSocket(data) {
 
   if (data.type === 'watering_started') {
     marcarRiegoEnMonitor(data.device_id, true);
+    // Refrescamos silenciosamente para que el evento en estado "En curso..." aparezca en la tabla
+    if (currentMonitorPlant && currentMonitorPlant.device_id === data.device_id) {
+      refrescarMonitorActivo(false);
+    }
     return;
   }
 
   if (data.type === 'watering_stopped') {
     marcarRiegoEnMonitor(data.device_id, false);
+    // Refrescamos silenciosamente para traer la duración final de riego
+    if (currentMonitorPlant && currentMonitorPlant.device_id === data.device_id) {
+      refrescarMonitorActivo(false);
+    }
   }
 }
 
@@ -606,6 +614,7 @@ function renderizarMonitor(data) {
 
   renderizarRecomendaciones(plantType.ideal, health);
   actualizarBotonRiego(state, plantType.ideal, deviceId, deviceStatus);
+  renderizarTablaRiego(data.watering_events); // <-- Llamada para actualizar la tabla
   actualizarEstadoConexionMonitor(deviceStatus, deviceId);
 
   if (gardenPlant?.device_id) {
@@ -1183,4 +1192,36 @@ async function refrescarMonitorActivo(forceToast) {
       mostrarToast('No se pudo actualizar la ventana de tiempo.');
     }
   }
+}
+
+function renderizarTablaRiego(events) {
+  const tbody = document.getElementById('wateringHistoryBody');
+  if (!tbody) return;
+
+  if (!Array.isArray(events) || events.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" class="watering-empty">No hay eventos en esta ventana de tiempo.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = events.map(event => {
+    const date = new Date(event.timestamp);
+    const dateStr = date.toLocaleString('es-ES', { 
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
+    });
+    
+    const isManual = event.triggered_by === 'manual';
+    const typeClass = isManual ? 'watering-type-manual' : 'watering-type-auto';
+    const typeText = isManual ? 'Manual' : 'Automático';
+    
+    // Si todavía no hay duración porque no ha terminado, mostramos "En curso..."
+    const durationText = event.duration_sec ? `${event.duration_sec}s` : 'En curso...';
+
+    return `
+      <tr>
+        <td>${dateStr}</td>
+        <td class="${typeClass}">${typeText}</td>
+        <td>${durationText}</td>
+      </tr>
+    `;
+  }).join('');
 }
