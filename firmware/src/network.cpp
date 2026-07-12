@@ -12,7 +12,8 @@ const int MQTT_PORT = SECRET_MQTT_PORT;
 const char* MQTT_USERNAME = SECRET_MQTT_USER;
 const char* MQTT_PASSWORD = SECRET_MQTT_PASS;
 
-const int PIN_BOMBA = 19; // cambiar a 19 cuando se tenga el rele conectado
+const int PIN_BOMBA = 19;
+const int PIN_LED_INDICATOR = 2; 
 
 String deviceID;
 String topicData;
@@ -78,6 +79,7 @@ void setupNetwork() {
     ESP.restart();
   }
   Serial.println("\n✅ WiFi conectado!");
+  digitalWrite(PIN_LED_INDICATOR, HIGH);
   
   deviceID = WiFi.macAddress();
   topicData    = "sensor/data/" + deviceID;
@@ -93,6 +95,7 @@ void setupNetwork() {
 void loopNetwork() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("⚠️ WiFi desconectado. Intentando reconectar...");
+    digitalWrite(PIN_LED_INDICATOR, LOW);
     WiFi.disconnect();
     setupNetwork();
     return;

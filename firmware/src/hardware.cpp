@@ -8,7 +8,8 @@ const float SUELO_HUMEDO = 650.0;
 const float ALPHA        = -0.0046;
 const float T_REF        = 25.0;
 
-const int PIN_BOMBA      = 19; // cambiar a 19 cuando se tenga el rele conectado
+const int PIN_BOMBA      = 19; 
+const int PIN_LED_INDICATOR = 2; 
 const int HUMEDAD_INICIO = 30;
 const int HUMEDAD_STOP   = 100;
 
@@ -93,6 +94,9 @@ uint16_t leerNPK(const byte* comando, size_t len) {
 }
 
 void setupHardware() {
+  pinMode(PIN_LED_INDICATOR, OUTPUT);
+  digitalWrite(PIN_LED_INDICATOR, LOW);
+  
   pinMode(PIN_BOMBA, OUTPUT);
   digitalWrite(PIN_BOMBA, LOW);
 
