@@ -3,4 +3,4 @@
 
 void setupNetwork();
 void loopNetwork();
-void publishSensorData(int humedad, int temp, byte n, byte p, byte k);
+void publishSensorData(int humedad, int temp, uint16_t &n, uint16_t &p, uint16_t &k);

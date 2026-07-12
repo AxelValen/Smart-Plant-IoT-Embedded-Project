@@ -42,7 +42,7 @@ int calcularHumedad(float capCorregida) {
   return (int)humedad;
 }
 
-byte leerNPK(const byte* comando, size_t len) {
+uint16_t leerNPK(const byte* comando, size_t len) {
   // Limpiar buffer de lecturas residuales
   while (mod.available()) {
     mod.read();
@@ -56,7 +56,6 @@ byte leerNPK(const byte* comando, size_t len) {
   mod.write(comando, len);
   mod.flush();
   
-  // Pequeño margen para asegurar que el último bit salió
   delayMicroseconds(1000);
 
   // Cambiar a recepción
@@ -86,7 +85,7 @@ byte leerNPK(const byte* comando, size_t len) {
   if (index == 7 && response[0] == 0x01 && response[1] == 0x03 && response[2] == 0x02) {
     // Combinar byte alto y bajo
     uint16_t dato = (response[3] << 8) | response[4];
-    return (byte)dato;
+    return dato; // Retornar el uint16_t intacto
   }
   
   // Retornar 0 si hubo error o timeout
@@ -129,7 +128,7 @@ void processHumidity_Temp(int &humedadOut, int &tempOut) {
   tempOut = (int)tempC;
 }
 
-void readNPKValues(byte &n, byte &p, byte &k) {
+void readNPKValues(uint16_t &n, uint16_t &p, uint16_t &k) {
   n = leerNPK(nitro, sizeof(nitro));
   delay(300); 
   p = leerNPK(phos, sizeof(phos));
