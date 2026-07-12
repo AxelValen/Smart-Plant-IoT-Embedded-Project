@@ -289,6 +289,7 @@ mqttClient.on('connect', () => {
   console.log('✅ Servidor conectado a EMQX Broker');
   mqttClient.subscribe('sensor/data/#');      // '#' = todos los subtopics
   mqttClient.subscribe('device/register');
+  mqttClient.subscribe('device/status/#');
 });
 
 wss.on('connection', (ws) => {
@@ -427,12 +428,51 @@ wss.on('connection', (ws) => {
 
 // Cuando llega un mensaje MQTT, lo reenvía a todos los navegadores conectados
 mqttClient.on('message', async (topic, message) => {
+  const messageStr = message.toString();
+
+  // 1. PROCESAR TEXTO PLANO PRIMERO (LWT y Estado)
+  if (topic.startsWith('device/status/')) {
+    const deviceID = topic.split('/')[2];
+    const statusPayload = messageStr; // "online" u "offline"
+    
+    // Obtenemos el dispositivo del caché si existe
+    const device = devices.get(deviceID) || {}; 
+    
+    // Actualizamos el caché en memoria
+    device.status = statusPayload;
+    if (!devices.has(deviceID)) {
+        devices.set(deviceID, device);
+    }
+    
+    if (statusPayload === 'offline') {
+      console.log(`🔌 Módulo ${deviceID} desconectado (LWT / Timeout Broker)`);
+      
+      if (wateringStart.has(deviceID)) {
+          mqttClient.publish(`control/led/${deviceID}`, 'LED_OFF');
+          wateringStart.delete(deviceID);
+          broadcastToClients({ type: 'watering_stopped', device_id: deviceID, reason: 'timeout' });
+          console.log(`❌ Riego de emergencia detenido para ${deviceID} por desconexión`);
+      }
+    } else {
+      console.log(`✅ Módulo ${deviceID} conectado (Online)`);
+    }
+    
+    broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
+    
+    Device.findOneAndUpdate({ device_id: deviceID }, { status: statusPayload })
+      .then(() => console.log(`💾 Estado de ${deviceID} actualizado a ${statusPayload} en DB`))
+      .catch(err => console.error('Error actualizando DB:', err.message));
+      
+    return; // Salir de la función aquí, NO intentar parsear como JSON
+  }
+
+
+  // 2. PROCESAR JSON (Telemetría y Registro)
   let payload;
-  
   try {
-    payload = JSON.parse(message.toString());
+    payload = JSON.parse(messageStr);
   } catch {
-    console.warn('⚠️  Mensaje MQTT no es JSON válido:', message.toString());
+    console.warn(`⚠️ Mensaje MQTT no es JSON válido en [${topic}]:`, messageStr);
     return;
   }
 
@@ -443,7 +483,6 @@ mqttClient.on('message', async (topic, message) => {
     return;
   }
 
-  // ── 3b. Datos de sensor ──────────────────────────────────────
   if (topic.startsWith('sensor/data/')) {
     const deviceID = topic.split('/')[2];
     await handleSensorData(deviceID, payload);

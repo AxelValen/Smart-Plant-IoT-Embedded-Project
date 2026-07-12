@@ -40,11 +40,13 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
 void connectMQTT() {
   unsigned long startAttemptTime = millis();
+  String topicStatus = "device/status/" + deviceID;
   while (!mqtt.connected() && millis() - startAttemptTime < 10000) {
     Serial.print("Conectando al broker MQTT...");
-    if (mqtt.connect(deviceID.c_str(), MQTT_USERNAME, MQTT_PASSWORD)) {
+    if (mqtt.connect(deviceID.c_str(), MQTT_USERNAME, MQTT_PASSWORD, topicStatus.c_str(), 0, true, "offline")) {
       Serial.println(" ✅ conectado!");
       mqtt.subscribe(topicControl.c_str());
+      mqtt.publish(topicStatus.c_str(), "online", true);
       
       String reg = "{\"device_id\":\"" + deviceID + "\",\"status\":\"pending\"}";
       mqtt.publish(topicRegister.c_str(), reg.c_str(), false);
@@ -84,6 +86,8 @@ void setupNetwork() {
   wifiClient.setInsecure();
   mqtt.setServer(MQTT_BROKER_URL, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
+
+  mqtt.setKeepAlive(5);
 }
 
 void loopNetwork() {
@@ -97,7 +101,7 @@ void loopNetwork() {
   mqtt.loop(); 
 }
 
-void publishSensorData(int humidity, int temp, byte n, byte p, byte k) {
+void publishSensorData(int humidity, int temp, uint16_t &n, uint16_t &p, uint16_t &k) {
   // Construcción del JSON con los datos de hardware
   JsonDocument doc;
   doc["humidity"] = humidity;
