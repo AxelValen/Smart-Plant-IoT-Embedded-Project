@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mi Cuenta — Smart-Plant</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .account-page { width: min(1050px, calc(100% - 2rem)); margin: 0 auto; padding: 3.5rem 0 4.5rem; }
+    .account-summary-grid { display: grid; grid-template-columns: minmax(290px, 0.8fr) minmax(0, 1.2fr); gap: 1.5rem; }
+    .account-card { background: #ffffff; border: 1px solid #ded3c5; border-radius: 22px; padding: 2rem; box-shadow: 0 12px 34px rgba(61, 43, 31, 0.1); position: relative; overflow: hidden; }
+    .account-card::before { content: ""; position: absolute; inset: 0 0 auto; height: 4px; background: var(--hoja); }
+    .account-card h2 { margin: 0 0 0.75rem; color: var(--tierra); font-family: "Playfair Display", serif; font-size: 2rem; }
+    .account-user-data { display: grid; gap: 0.7rem; margin: 1.5rem 0; }
+    .account-user-data div { padding: 0.85rem 1rem; background: var(--crema); border: 1px solid #e0d8cc; border-radius: 14px; }
+    .account-user-data dt { color: var(--muted); font-family: "Space Mono", monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; margin-bottom: 0.2rem;}
+    .account-user-data dd { margin: 0; color: var(--texto); font-weight: 700; }
+    .account-actions { display: flex; gap: 0.8rem; flex-wrap: wrap; }
+    .btn-account { padding: 0.7rem 1.2rem; border-radius: 999px; font-weight: 700; cursor: pointer; border: none; text-decoration: none; font-size: 0.85rem;}
+    .btn-danger { background: #fff3f0; border: 1px solid #e8b9ae; color: #9d3f2e; }
+    .btn-secondary { background: var(--arena); color: var(--tierra); }
+    .account-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 1.5rem; }
+    .account-stat { padding: 1.5rem 1rem; background: var(--crema); border: 1px solid #e0d8cc; border-radius: 18px; text-align: center; }
+    .account-stat span { display: block; color: var(--tierra); font-family: "Playfair Display", serif; font-size: 2.5rem; font-weight: 700; line-height: 1; }
+    .account-stat small { color: var(--muted); font-family: "Space Mono", monospace; font-size: 0.7rem; text-transform: uppercase; font-weight: 700;}
+    
+    @media (max-width: 850px) {
+      .account-summary-grid { grid-template-columns: 1fr; }
+      .account-stats { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a class="nav-brand" href="home.html">🌱 Smart-Plant</a>
+    <div class="nav-links">
+      <a href="home.html">Home</a>
+      <a href="addplant.html">Add Plant</a>
+      <a href="virtualgarden.html">Virtual Garden</a>
+      <a href="cuenta.html" class="activo">Cuenta</a>
+    </div>
+  </nav>
+
+  <header class="page-header">
+    <p class="page-header-eyebrow">Panel Personal</p>
+    <h1>Mi Cuenta</h1>
+    <p>Gestiona tu perfil y visualiza un resumen del estado de tu jardín.</p>
+  </header>
+
+  <main class="account-page">
+    <section class="account-summary-grid">
+      <!-- Account Profile Card -->
+      <article class="account-card">
+        <p class="section-eyebrow">Usuario conectado</p>
+        <h2>Detalles del perfil</h2>
+        <dl class="account-user-data">
+          <div>
+            <dt>Nombre de usuario</dt>
+            <dd id="accountName">Cargando...</dd>
+          </div>
+          <div>
+            <dt>Correo electrónico</dt>
+            <dd id="accountEmail">Cargando...</dd>
+          </div>
+        </dl>
+        <div class="account-actions">
+          <button class="btn-account btn-danger" onclick="logout()">Cerrar sesión</button>
+        </div>
+      </article>
+
+      <!-- Account Health Card -->
+      <article class="account-card">
+        <p class="section-eyebrow">Resumen general</p>
+        <h2>Estado de tus plantas</h2>
+        <p style="color: var(--muted); line-height: 1.6;">Vista rápida de la salud de todas las plantas configuradas en tu Virtual Garden.</p>
+        
+        <div class="account-stats">
+          <div class="account-stat">
+            <span id="statTotal">0</span>
+            <small>Plantas totales</small>
+          </div>
+          
+          <div class="account-stat" style="border-color: rgba(74, 124, 89, 0.35);">
+            <span id="statHealthy" style="color: #346844;">0</span>
+            <small>Saludables</small>
+          </div>
+
+          <div class="account-stat" style="border-color: rgba(163, 63, 47, 0.35);">
+            <span id="statDanger" style="color: #a33f2f;">0</span>
+            <small>En riesgo</small>
+          </div>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <footer>Smart-Plant — Sistema IoT de Monitoreo de Suelo</footer>
+
+  <script src="script.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const token = localStorage.getItem('sp_token');
+      if (!token) { window.location.href = 'login.html'; return; }
+
+      // 1. Cargar datos del usuario
+      try {
+        const resUser = await fetch('/api/auth/me', { headers: { 'Authorization': `Bearer ${token}` } });
+        const dataUser = await resUser.json();
+        if (resUser.ok) {
+          document.getElementById('accountName').textContent = dataUser.user.name || 'Sin nombre';
+          document.getElementById('accountEmail').textContent = dataUser.user.email;
+        }
+      } catch (e) { console.error('Error cargando usuario', e); }
+
+      // 2. Cargar estado de las plantas (Virtual Garden)
+      try {
+        const resGarden = await fetch('/api/garden', { headers: { 'Authorization': `Bearer ${token}` } });
+        const dataGarden = await resGarden.json();
+        
+        if (resGarden.ok && dataGarden.garden) {
+          const plants = dataGarden.garden;
+          document.getElementById('statTotal').textContent = plants.length;
+
+          // Contadores de estado
+          let healthyCount = 0;
+          let dangerCount = 0;
+
+          // Consultar el /api/monitor para cada planta y obtener su 'health' real
+          const healthPromises = plants.map(p => 
+            fetch(`/api/monitor/${encodeURIComponent(p._id)}?window=1h`, { 
+              headers: { 'Authorization': `Bearer ${token}` } 
+            }).then(r => r.json())
+          );
+
+          // Esperar a que todos los monitores devuelvan datos
+          const monitors = await Promise.allSettled(healthPromises);
+
+          monitors.forEach(result => {
+             if (result.status === 'fulfilled' && result.value.health) {
+                 const healthStatus = result.value.health.status;
+                 if (healthStatus === 'saludable') {
+                     healthyCount++;
+                 } else if (healthStatus === 'en_riesgo') {
+                     dangerCount++;
+                 }
+                 // 'desconocido' no se suma a ninguno de los dos (Ej: dispositivo apagado sin datos recientes)
+             }
+          });
+
+          // Actualizar los IDs en la interfaz
+          document.getElementById('statHealthy').textContent = healthyCount;
+          document.getElementById('statDanger').textContent = dangerCount;
+        }
+      } catch (e) { console.error('Error cargando estado de plantas', e); }
+    });
+  </script>
+</body>
+</html>
