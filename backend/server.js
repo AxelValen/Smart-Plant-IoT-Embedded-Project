@@ -37,10 +37,10 @@ mongoose.connect(process.env.MONGODB_URI)
 
 app.post('/api/auth/register', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { name, email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email y contraseña son requeridos' });
+    if (!name || !email || !password) {
+      return res.status(400).json({ error: 'Nombre, email y contraseña son requeridos' });
     }
 
     const existingUser = await User.findOne({ email: email.toLowerCase() });
@@ -48,7 +48,7 @@ app.post('/api/auth/register', async (req, res) => {
       return res.status(409).json({ error: 'Ya existe un usuario con ese email' });
     }
 
-    const user = await User.create({ email, password });
+    const user = await User.create({ name, email, password });
 
     const token = jwt.sign(
       { user_id: user._id, email: user.email },
@@ -56,7 +56,7 @@ app.post('/api/auth/register', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    res.status(201).json({ token, user: { id: user._id, email: user.email } });
+    res.status(201).json({ token, user: { id: user._id, name: user.name, email: user.email } });
 
   } catch (err) {
     console.error('❌ Error en registro:', err.message);
@@ -88,7 +88,7 @@ app.post('/api/auth/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    res.json({ token, user: { id: user._id, email: user.email } });
+    res.json({ token, user: { id: user._id, name: user.name, email: user.email } });
 
   } catch (err) {
     console.error('❌ Error en login:', err.message);

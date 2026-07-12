@@ -79,6 +79,7 @@ forms.login.addEventListener('submit', async (e) => {
 forms.register.addEventListener('submit', async (e) => {
   e.preventDefault();
 
+  const name      = document.getElementById('registerName').value.trim();
   const email     = document.getElementById('registerEmail').value.trim();
   const password  = document.getElementById('registerPassword').value;
   const password2 = document.getElementById('registerPassword2').value;
@@ -94,7 +95,7 @@ forms.register.addEventListener('submit', async (e) => {
     const res = await fetch('/api/auth/register', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ email, password })
+      body:    JSON.stringify({ name, email, password })
     });
 
     const data = await res.json();
