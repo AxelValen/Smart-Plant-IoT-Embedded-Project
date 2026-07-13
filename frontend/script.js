@@ -47,6 +47,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  apiFetch('/api/auth/me')
+    .then(data => {
+      if (data && data.user && data.user.name) {
+        // Busca el enlace que apunta a cuenta.html dentro de la navegación
+        const cuentaLink = document.querySelector('.nav-links a[href="cuenta.html"]');
+        if (cuentaLink) {
+          // Extrae solo el primer nombre y le concatena el emoji
+          cuentaLink.textContent = '👤 ' + data.user.name.split(' ')[0];
+        }
+      }
+    })
+    .catch(err => console.error('Error al cargar nombre para el menú:', err));
+
   cargarJardin();
 
   inicializarCarruselPrincipal();
