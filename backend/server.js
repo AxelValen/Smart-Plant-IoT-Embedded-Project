@@ -184,7 +184,8 @@ app.delete('/api/garden/:gardenPlantId', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'La planta no existe' });
     }
 
-    if (gardenPlant.device_id) {
+    // Solo devolver a 'pending' si es un módulo real
+    if (gardenPlant.device_id && !gardenPlant.device_id.startsWith('archived_')) {
       await Device.findOneAndUpdate(
         { device_id: gardenPlant.device_id },
         { $set: { user_id: null, plant_type: null, status: 'pending', last_seen: new Date() } }
@@ -201,6 +202,11 @@ app.delete('/api/garden/:gardenPlantId', authMiddleware, async (req, res) => {
       });
 
       broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
+    }
+
+    if (gardenPlant.device_id && gardenPlant.device_id.startsWith('archived_')) {
+      await Device.deleteOne({ device_id: gardenPlant.device_id });
+      devices.delete(gardenPlant.device_id);
     }
 
     res.json({ garden_plant: serializarGardenPlant(gardenPlant) });
@@ -279,7 +285,7 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {
   username: process.env.MQTT_USERNAME,
   password: process.env.MQTT_PASSWORD,
-  clientId: "Backend_Server_local"
+  clientId: "Backend_Server_local_2"
 });
 
 const devices = new Map();
@@ -332,16 +338,26 @@ wss.on('connection', (ws) => {
         }
 
         const plantInfo = selectedPlant.plant_type_id;
+        const oldDeviceId = selectedPlant.device_id; // Capturamos el ID anterior (puede ser null o archived_)
 
+        // 1. Desasignar cualquier otra planta que tuviera este módulo físico
         await GardenPlant.updateMany(
           { user_id: userID, device_id: deviceID, _id: { $ne: selectedPlant._id } },
           { $set: { device_id: null } }
         );
 
+        // 2. Si la planta que estamos asignando tenía un historial archivado, rescatarlo
+        if (oldDeviceId && oldDeviceId.startsWith('archived_')) {
+          await SensorReading.updateMany({ device_id: oldDeviceId, user_id: userID }, { $set: { device_id: deviceID } });
+          await WateringEvent.updateMany({ device_id: oldDeviceId }, { $set: { device_id: deviceID } });
+        }
+
+        // 3. Asignar el nuevo módulo a la planta
         await GardenPlant.findByIdAndUpdate(selectedPlant._id, {
           device_id: deviceID
         });
 
+        // 4. Actualizar el estado del módulo en DB
         await Device.findOneAndUpdate(
           { device_id: deviceID },
           {
@@ -353,6 +369,7 @@ wss.on('connection', (ws) => {
           { upsert: true, new: true, setDefaultsOnInsert: true }
         );
 
+        // 5. Actualizar en memoria RAM
         devices.set(deviceID, {
           user_id: userID,
           plant_type: plantInfo?.name || null,
@@ -364,10 +381,60 @@ wss.on('connection', (ws) => {
         });
 
         console.log(`✅ Dispositivo ${deviceID} asignado a: ${plantInfo?.display_name || plantInfo?.name || 'planta'}`);
+        if (oldDeviceId && oldDeviceId.startsWith('archived_')) {
+            console.log(`♻️ Historial rescatado desde ${oldDeviceId} hacia ${deviceID}`);
+        }
         
         // Notifica a todos los clientes que la lista de dispositivos cambió
         broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
-        return; // Termina la ejecución para no caer en la lógica de los LEDs
+        return; 
+      }
+
+      // --- NUEVA LÓGICA DE DESASIGNACIÓN ---
+      if (cmd === 'UNASSIGN_PLANT') {
+        const selectedGardenPlantId = data.garden_plant_id;
+        const deviceID = data.device_id;
+
+        if (!deviceID || !userID || !selectedGardenPlantId) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Datos incompletos para desasignar' }));
+          return;
+        }
+
+        // Crear un ID de archivo virtual para mantener el historial intacto
+        const archivedId = `archived_${deviceID}_${Date.now()}`;
+
+        // 1. Reasignar el historial a este ID archivado
+        await SensorReading.updateMany({ device_id: deviceID, user_id: userID }, { $set: { device_id: archivedId } });
+        await WateringEvent.updateMany({ device_id: deviceID }, { $set: { device_id: archivedId } });
+
+        // 2. Actualizar la planta con el ID archivado
+        await GardenPlant.findByIdAndUpdate(selectedGardenPlantId, { $set: { device_id: archivedId } });
+
+        // 3. Liberar el módulo físico manteniendo su estado de conexión real
+        const currentDevice = devices.get(deviceID);
+        const nextStatus = (currentDevice && currentDevice.status === 'offline') ? 'offline' : 'pending';
+
+        await Device.findOneAndUpdate(
+          { device_id: deviceID },
+          { $set: { user_id: null, plant_type: null, status: nextStatus, last_seen: new Date() } }
+        );
+
+        // 4. Actualizar estado en memoria
+        devices.set(deviceID, {
+          user_id: null,
+          plant_type: null,
+          ideal: null,
+          status: nextStatus,
+          lastReading: null,
+          last_seen: Date.now(),
+          garden_plant_id: null
+        });
+
+        console.log(`✅ Dispositivo ${deviceID} desasignado. Historial preservado en ${archivedId}`);
+        
+        // Notificamos para que se actualice la vista
+        broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
+        return;
       }
   
       if (cmd === 'LED_ON') {
@@ -745,7 +812,9 @@ async function stopWatering(deviceID, device, reading, healthResult) {
 function getDevicesSnapshot() {
   const snapshot = {};
   devices.forEach((info, id) => {
-    snapshot[id] = { device_id: id, ...info };
+    if (!id.startsWith('archived_')) {
+      snapshot[id] = { device_id: id, ...info };
+    }
   });
   return snapshot;
 }
