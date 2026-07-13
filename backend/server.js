@@ -786,94 +786,7 @@ function inferIdealForCatalog(catalogLabel) {
     potasio: { min: 35, max: 120 }
   };
 
-  const catalogPresets = {
-    cactus: {
-      humidity: { min: 10, max: 35 },
-      temperature: { min: 18, max: 35 },
-      nitrogeno: { min: 20, max: 90 },
-      fosforo: { min: 20, max: 90 },
-      potasio: { min: 20, max: 90 }
-    },
-    suculenta: {
-      humidity: { min: 15, max: 45 },
-      temperature: { min: 18, max: 32 },
-      nitrogeno: { min: 20, max: 90 },
-      fosforo: { min: 20, max: 90 },
-      potasio: { min: 20, max: 90 }
-    },
-    semi_suculenta: {
-      humidity: { min: 20, max: 50 },
-      temperature: { min: 18, max: 32 },
-      nitrogeno: { min: 20, max: 90 },
-      fosforo: { min: 20, max: 90 },
-      potasio: { min: 20, max: 90 }
-    },
-    ornamental_de_follaje: {
-      humidity: { min: 45, max: 75 },
-      temperature: { min: 18, max: 28 },
-      nitrogeno: { min: 35, max: 110 },
-      fosforo: { min: 35, max: 110 },
-      potasio: { min: 35, max: 110 }
-    },
-    ornamental_floral: {
-      humidity: { min: 45, max: 75 },
-      temperature: { min: 16, max: 28 },
-      nitrogeno: { min: 35, max: 110 },
-      fosforo: { min: 35, max: 110 },
-      potasio: { min: 35, max: 110 }
-    },
-    hortaliza_de_fruto: {
-      humidity: { min: 55, max: 80 },
-      temperature: { min: 18, max: 28 },
-      nitrogeno: { min: 45, max: 120 },
-      fosforo: { min: 45, max: 120 },
-      potasio: { min: 45, max: 120 }
-    },
-    hortaliza_de_hoja: {
-      humidity: { min: 65, max: 90 },
-      temperature: { min: 15, max: 24 },
-      nitrogeno: { min: 45, max: 120 },
-      fosforo: { min: 45, max: 120 },
-      potasio: { min: 45, max: 120 }
-    },
-    bulbo: {
-      humidity: { min: 45, max: 70 },
-      temperature: { min: 12, max: 24 },
-      nitrogeno: { min: 35, max: 100 },
-      fosforo: { min: 35, max: 100 },
-      potasio: { min: 35, max: 100 }
-    },
-    raiz_comestible: {
-      humidity: { min: 55, max: 80 },
-      temperature: { min: 14, max: 24 },
-      nitrogeno: { min: 35, max: 110 },
-      fosforo: { min: 35, max: 110 },
-      potasio: { min: 35, max: 110 }
-    },
-    frutal_arboreo: {
-      humidity: { min: 50, max: 80 },
-      temperature: { min: 18, max: 30 },
-      nitrogeno: { min: 40, max: 120 },
-      fosforo: { min: 40, max: 120 },
-      potasio: { min: 40, max: 120 }
-    },
-    frutal_herbaceo: {
-      humidity: { min: 60, max: 85 },
-      temperature: { min: 15, max: 28 },
-      nitrogeno: { min: 40, max: 120 },
-      fosforo: { min: 40, max: 120 },
-      potasio: { min: 40, max: 120 }
-    },
-    frutal_trepador: {
-      humidity: { min: 55, max: 80 },
-      temperature: { min: 18, max: 30 },
-      nitrogeno: { min: 40, max: 120 },
-      fosforo: { min: 40, max: 120 },
-      potasio: { min: 40, max: 120 }
-    }
-  };
-
-  return catalogPresets[normalized] || defaults;
+  return defaults;
 }
 
 function obtenerVentanaDeHistorial(windowParam) {
@@ -953,35 +866,6 @@ function broadcastToClients(data) {
 }
 
 mqttClient.on('error', (err) => console.error('❌ Error MQTT:', err));
-
-// ── Detección de módulos desconectados ────────────────
-setInterval(() => {
-  const now = Date.now();
-  let changed = false;
-  
-  devices.forEach((device, deviceID) => {
-    // Si han pasado más de 5 segundos sin telemetría, se declara offline
-    if (device.status !== 'offline' && device.last_seen && (now - device.last_seen > 5000)) {
-      device.status = 'offline';
-      changed = true;
-      console.log(`🔌 Módulo ${deviceID} desconectado (Timeout)`);
-      
-      // Detiene el riego en la base de datos si se desconectó regando
-      if (wateringStart.has(deviceID)) {
-          mqttClient.publish(`control/led/${deviceID}`, 'LED_OFF');
-          wateringStart.delete(deviceID);
-          broadcastToClients({ type: 'watering_stopped', device_id: deviceID, reason: 'timeout' });
-      }
-      
-      Device.findOneAndUpdate({ device_id: deviceID }, { status: 'offline' })
-        .catch(err => console.error('Error al actualizar BD:', err.message));
-    }
-  });
-  
-  if (changed) {
-    broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
-  }
-}, 5000);
 
 const PORT = process.env.PORT || 3000;
 
