@@ -1021,33 +1021,6 @@ function abrirDialogoAsignacion(deviceId) {
   if (titulo) titulo.textContent = `Asignar planta a ${deviceId}`;
   renderizarListaDeAsignacion(deviceId);
   if (dialogo.showModal && !dialogo.open) dialogo.showModal();
-
-  if (lista) {
-    lista.replaceChildren();
-
-    if (gardenCache.length === 0) {
-      const empty = document.createElement('p');
-      empty.textContent = 'Agrega plantas a tu jardín para asignarlas al módulo.';
-      lista.appendChild(empty);
-
-      const abrirCatalogo = document.createElement('a');
-      abrirCatalogo.className = 'dialog-action dialog-action-primary';
-      abrirCatalogo.href = 'addplant.html';
-      abrirCatalogo.textContent = 'Agregar plantas';
-      lista.appendChild(abrirCatalogo);
-    } else {
-      gardenCache.forEach((planta) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'dialog-action dialog-action-primary';
-        button.textContent = obtenerNombreDePlanta(planta);
-        button.addEventListener('click', () => asignarPlantaADevice(deviceId, planta._id));
-        lista.appendChild(button);
-      });
-    }
-  }
-
-  if (dialogo.showModal && !dialogo.open) dialogo.showModal();
 }
 
 function renderizarListaDeAsignacion(deviceId) {

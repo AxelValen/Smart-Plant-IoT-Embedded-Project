@@ -42,7 +42,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 void connectMQTT() {
   unsigned long startAttemptTime = millis();
   String topicStatus = "device/status/" + deviceID;
-  while (!mqtt.connected() && millis() - startAttemptTime < 10000) {
+  while (!mqtt.connected() && millis() - startAttemptTime < 60000) {
     Serial.print("Conectando al broker MQTT...");
     if (mqtt.connect(deviceID.c_str(), MQTT_USERNAME, MQTT_PASSWORD, topicStatus.c_str(), 0, true, "offline")) {
       Serial.println(" ✅ conectado!");
@@ -65,6 +65,10 @@ void connectMQTT() {
 }
 
 void setupNetwork() {
+  WiFi.mode(WIFI_STA); // Forzar el modo estación 
+  WiFi.disconnect(true); // Desconectar y borrar cualquier configuración previa en caché
+  delay(500); // Darle un momento al radio WiFi para estabilizarse antes de iniciar
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Conectando a WiFi");
   // Timeout para WiFi (Watchdog de 15 segundos)
@@ -89,16 +93,16 @@ void setupNetwork() {
   mqtt.setServer(MQTT_BROKER_URL, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
 
-  mqtt.setKeepAlive(5);
+  mqtt.setKeepAlive(30);
 }
 
 void loopNetwork() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("⚠️ WiFi desconectado. Intentando reconectar...");
     digitalWrite(PIN_LED_INDICATOR, LOW);
-    WiFi.disconnect();
-    setupNetwork();
-    return;
+    
+    delay(1000); 
+    ESP.restart();
   }
   if (!mqtt.connected()) connectMQTT();
   mqtt.loop(); 

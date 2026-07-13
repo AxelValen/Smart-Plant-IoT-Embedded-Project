@@ -279,7 +279,7 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {
   username: process.env.MQTT_USERNAME,
   password: process.env.MQTT_PASSWORD,
-  clientId: "Backend_Server"
+  clientId: "Backend_Server_local"
 });
 
 const devices = new Map();
@@ -435,35 +435,43 @@ mqttClient.on('message', async (topic, message) => {
     const deviceID = topic.split('/')[2];
     const statusPayload = messageStr; // "online" u "offline"
     
-    // Obtenemos el dispositivo del caché si existe
-    const device = devices.get(deviceID) || {}; 
-    
-    // Actualizamos el caché en memoria
-    device.status = statusPayload;
-    if (!devices.has(deviceID)) {
-        devices.set(deviceID, device);
-    }
-    
     if (statusPayload === 'offline') {
+      const device = devices.get(deviceID) || {};
+      device.status = 'offline';
+      devices.set(deviceID, device);
+      
       console.log(`🔌 Módulo ${deviceID} desconectado (LWT / Timeout Broker)`);
-      
       if (wateringStart.has(deviceID)) {
-          mqttClient.publish(`control/led/${deviceID}`, 'LED_OFF');
-          wateringStart.delete(deviceID);
-          broadcastToClients({ type: 'watering_stopped', device_id: deviceID, reason: 'timeout' });
-          console.log(`❌ Riego de emergencia detenido para ${deviceID} por desconexión`);
+        mqttClient.publish(`control/led/${deviceID}`, 'LED_OFF');
+        wateringStart.delete(deviceID);
+        broadcastToClients({ type: 'watering_stopped', device_id: deviceID, reason: 'timeout' });
+        console.log(`❌ Riego de emergencia detenido para ${deviceID} por desconexión`);
       }
-    } else {
-      console.log(`✅ Módulo ${deviceID} conectado (Online)`);
-    }
-    
-    broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
-    
-    Device.findOneAndUpdate({ device_id: deviceID }, { status: statusPayload })
-      .then(() => console.log(`💾 Estado de ${deviceID} actualizado a ${statusPayload} en DB`))
-      .catch(err => console.error('Error actualizando DB:', err.message));
+      broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
       
-    return; // Salir de la función aquí, NO intentar parsear como JSON
+      Device.findOneAndUpdate({ device_id: deviceID }, { status: 'offline' })
+        .catch(err => console.error('Error actualizando DB:', err.message));
+    } else {
+      // Validamos en DB si el módulo está asignado
+      Device.findOne({ device_id: deviceID }).then(existing => {
+        let finalStatus = 'online';
+        // Si no existe o no tiene dueño asignado, forzamos a que sea pending
+        if (!existing || !existing.user_id) {
+          finalStatus = 'pending';
+        }
+        
+        const device = devices.get(deviceID) || {};
+        device.status = finalStatus;
+        devices.set(deviceID, device);
+        
+        console.log(`✅ Módulo ${deviceID} conectado (${finalStatus})`);
+        broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
+        
+        Device.findOneAndUpdate({ device_id: deviceID }, { status: finalStatus }, { upsert: true, setDefaultsOnInsert: true })
+          .catch(err => console.error('Error actualizando DB:', err.message));
+      });
+    }
+    return; 
   }
 
 
