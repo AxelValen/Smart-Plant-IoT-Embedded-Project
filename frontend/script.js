@@ -34,6 +34,19 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  const currentPage = window.location.pathname.split('/').pop() || 'home.html';
+  document.querySelectorAll('.nav-links a').forEach(link => {
+    // Obtenemos el atributo href real (ej: "home.html")
+    const linkHref = link.getAttribute('href');
+    
+    // Si el href coincide con la página actual, le añadimos la clase 'activo'
+    if (linkHref === currentPage) {
+      link.classList.add('activo');
+    } else {
+      link.classList.remove('activo'); // Limpiamos por si acaso
+    }
+  });
+
   cargarJardin();
 
   inicializarCarruselPrincipal();
