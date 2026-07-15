@@ -1066,6 +1066,14 @@ function actualizarEstadoMonitorDesdeDispositivos() {
 
   currentMonitorData.device_status = device.status;
   actualizarEstadoConexionMonitor(device.status, currentMonitorPlant.device_id);
+
+  // Se actualiza el botón de riego inmediatamente tras recuperar la conexión
+  actualizarBotonRiego(
+    currentMonitorData.state,
+    currentMonitorData.garden_plant?.plant_type_id?.ideal || null,
+    currentMonitorPlant.device_id,
+    device.status
+  );
 }
 
 function manejarDispositivosPendientes() {

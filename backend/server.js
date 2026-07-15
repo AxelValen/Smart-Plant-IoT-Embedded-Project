@@ -366,7 +366,7 @@ wss.on('connection', (ws) => {
         }
 
         const plantInfo = selectedPlant.plant_type_id;
-        const oldDeviceId = selectedPlant.device_id; // Capturamos el ID anterior (puede ser null o archived_)
+        const oldDeviceId = selectedPlant.device_id; 
 
         // 1. Desasignar cualquier otra planta que tuviera este módulo físico
         await GardenPlant.updateMany(
@@ -413,7 +413,6 @@ wss.on('connection', (ws) => {
             console.log(`♻️ Historial rescatado desde ${oldDeviceId} hacia ${deviceID}`);
         }
         
-        // Notifica a todos los clientes que la lista de dispositivos cambió
         broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
         return; 
       }
@@ -428,7 +427,6 @@ wss.on('connection', (ws) => {
           return;
         }
 
-        // Crear un ID de archivo virtual para mantener el historial intacto
         const archivedId = `archived_${deviceID}_${Date.now()}`;
 
         // 1. Reasignar el historial a este ID archivado
@@ -459,16 +457,14 @@ wss.on('connection', (ws) => {
         });
 
         console.log(`✅ Dispositivo ${deviceID} desasignado. Historial preservado en ${archivedId}`);
-        
-        // Notificamos para que se actualice la vista
         broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
         return;
       }
   
       if (cmd === 'LED_ON') {
         mqttClient.publish(`control/led/${deviceID}`, 'LED_ON');
-        // Registra el inicio del riego
-        wateringStart.set(deviceID, Date.now());
+        // Registro del inicio de riego manual
+        wateringStart.set(deviceID, { time: Date.now(), type: 'manual' });
         const device = devices.get(deviceID);
         const last   = device?.lastReading;
   
@@ -492,14 +488,14 @@ wss.on('connection', (ws) => {
   
       } else if (cmd === 'LED_OFF') {
         mqttClient.publish(`control/led/${deviceID}`, 'LED_OFF');
-        // Calcula la duración y actualiza el último evento de riego
-        const startTime = wateringStart.get(deviceID);
-        if (startTime) {
-          const duration = Math.round((Date.now() - startTime) / 1000);
+        
+        // Calcula la duración extrayendo la información del objeto
+        const session = wateringStart.get(deviceID);
+        if (session) {
+          const duration = Math.round((Date.now() - session.time) / 1000);
           wateringStart.delete(deviceID);
   
           try {
-            // Actualiza el evento más reciente con la duración
             await WateringEvent.findOneAndUpdate(
               { device_id: deviceID },
               { duration_sec: duration },
@@ -692,7 +688,9 @@ async function handleSensorData(deviceID, payload) {
     }
 
     // ── Riego automático si la humedad está baja ─────────────────
-    const isWatering = wateringStart.has(deviceID);
+    const session = wateringStart.get(deviceID);
+    const isWatering = Boolean(session);
+    const isAutoWatering = isWatering && session.type === 'automatic';
 
     // ── Lógica de control con memoria de estado ──────────────────
     if (healthResult.needsWatering && device) {
@@ -701,8 +699,8 @@ async function handleSensorData(deviceID, payload) {
         triggerAutoWatering(deviceID, device, payload, healthResult);
       }
     } else {
-      // Solo apaga si el riego SÍ estaba activo
-      if (isWatering) {
+      // Solo apaga si el riego SÍ estaba activo y fue iniciado automáticamente
+      if (isAutoWatering) {
         stopWatering(deviceID, device, payload, healthResult);
       }
     }
@@ -781,7 +779,7 @@ async function triggerAutoWatering(deviceID, device, reading, healthResult) {
   console.log(`💧 Riego automático activado para ${deviceID}`);
 
   mqttClient.publish(`control/led/${deviceID}`, 'LED_ON');
-  wateringStart.set(deviceID, Date.now());
+  wateringStart.set(deviceID, { time: Date.now(), type: 'automatic' });
 
   try {
     await WateringEvent.create({
@@ -811,10 +809,10 @@ async function stopWatering(deviceID, device, reading, healthResult) {
 
   mqttClient.publish(`control/led/${deviceID}`, 'LED_OFF');
 
-  const startTime = wateringStart.get(deviceID);
+  const session = wateringStart.get(deviceID);
 
-  if (startTime) {
-    const duration = Math.round((Date.now() - startTime) / 1000);
+  if (session) {
+    const duration = Math.round((Date.now() - session.time) / 1000);
     wateringStart.delete(deviceID);
 
     try {
