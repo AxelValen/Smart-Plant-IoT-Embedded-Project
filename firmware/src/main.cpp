@@ -7,8 +7,8 @@ unsigned long lastSampleTime = 0;
 unsigned long lastPublishTime = 0;
 
 // Intervalos de muestreo y publicación
-const unsigned long INTERVALO_MUESTREO = 5000;    
-const unsigned long INTERVALO_PUBLICACION = 30000; 
+const unsigned long INTERVALO_MUESTREO = 2000;    
+const unsigned long INTERVALO_PUBLICACION = 10000; 
 
 // Acumuladores para el filtro
 long sumHumedad = 0;

@@ -40,36 +40,58 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 }
 
 void connectMQTT() {
-  unsigned long startAttemptTime = millis();
+  static unsigned long lastMQTTAttempt = 0;
+  static unsigned long mqttDisconnectTime = 0;
+
+  // Iniciar el watchdog de desconexión en el primer fallo
+  if (mqttDisconnectTime == 0) {
+    mqttDisconnectTime = millis();
+  }
+
+  // Si pasan 30 segundos sin poder conectar, forzar un reinicio para limpiar la RAM
+  if (millis() - mqttDisconnectTime > 30000) {
+    ESP.restart();
+  }
+
+  // Intentar conectar solo una vez cada 5 segundos
+  if (lastMQTTAttempt != 0 && millis() - lastMQTTAttempt < 5000) return;
+
   String topicStatus = "device/status/" + deviceID;
-  while (!mqtt.connected() && millis() - startAttemptTime < 10000) {
-    Serial.print("Conectando al broker MQTT...");
-    if (mqtt.connect(deviceID.c_str(), MQTT_USERNAME, MQTT_PASSWORD, topicStatus.c_str(), 0, true, "offline")) {
-      Serial.println(" ✅ conectado!");
-      mqtt.subscribe(topicControl.c_str());
-      mqtt.publish(topicStatus.c_str(), "online", true);
-      
-      String reg = "{\"device_id\":\"" + deviceID + "\",\"status\":\"pending\"}";
-      mqtt.publish(topicRegister.c_str(), reg.c_str(), false);
-    } else {
-      Serial.print(" ❌ falló, rc=");
-      Serial.print(mqtt.state());
-      Serial.println(" reintentando en 2s");
-      delay(2000);
-    }
+  Serial.print("Conectando al broker MQTT...");
+
+  if (mqtt.connect(deviceID.c_str(), MQTT_USERNAME, MQTT_PASSWORD, topicStatus.c_str(), 0, true, "offline")) {
+    Serial.println(" ✅ conectado!");
+    
+    mqttDisconnectTime = 0; // cancelamos el watchdog
+    
+    mqtt.subscribe(topicControl.c_str());
+    mqtt.publish(topicStatus.c_str(), "online", true);
+
+    String reg = "{\"device_id\":\"" + deviceID + "\",\"status\":\"pending\"}";
+    mqtt.publish(topicRegister.c_str(), reg.c_str(), false);
+  } else {
+    Serial.print(" ❌ falló, rc=");
+    Serial.println(mqtt.state());
+    
+    // Forzar el cierre del socket TLS 
+    wifiClient.stop();
   }
-  if (!mqtt.connected()) {
-    Serial.println("⚠️ Timeout MQTT. Reiniciando dispositivo...");
-    ESP.restart(); 
-  }
+
+  lastMQTTAttempt = millis();
 }
 
 void setupNetwork() {
+  WiFi.mode(WIFI_STA); 
+  WiFi.disconnect(true); 
+  delay(100); 
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Conectando a WiFi");
-  // Timeout para WiFi (Watchdog de 15 segundos)
+  
   unsigned long startAttemptTime = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 15000) {
+  
+  // Esperar no solo a estar conectado, sino a tener una IP enrutada
+  while ((WiFi.status() != WL_CONNECTED || WiFi.localIP().toString() == "0.0.0.0") && millis() - startAttemptTime < 15000) {
     delay(500);
     Serial.print(".");
   }
@@ -78,7 +100,14 @@ void setupNetwork() {
     Serial.println("\n⚠️ Timeout WiFi. Reiniciando dispositivo...");
     ESP.restart();
   }
+  
   Serial.println("\n✅ WiFi conectado!");
+  Serial.print("IP Asignada: ");
+  Serial.println(WiFi.localIP());
+  
+  // Darle 1 segundo a la pila de red para asentar rutas antes de iniciar TLS
+  delay(1000);
+
   digitalWrite(PIN_LED_INDICATOR, HIGH);
   
   deviceID = WiFi.macAddress();
@@ -86,10 +115,11 @@ void setupNetwork() {
   topicControl = "control/led/" + deviceID;
   
   wifiClient.setInsecure();
+  mqtt.setBufferSize(512);
   mqtt.setServer(MQTT_BROKER_URL, MQTT_PORT);
   mqtt.setCallback(mqttCallback);
 
-  mqtt.setKeepAlive(5);
+  mqtt.setKeepAlive(10);
 }
 
 void loopNetwork() {

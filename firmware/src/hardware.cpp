@@ -3,8 +3,8 @@
 
 // --- Variables y Constantes de Hardware ---
 Adafruit_seesaw ss;
-const float SUELO_SECO   = 330.0;
-const float SUELO_HUMEDO = 650.0;
+const float SUELO_SECO   = 390.0;
+const float SUELO_HUMEDO = 995.0;
 const float ALPHA        = -0.0046;
 const float T_REF        = 25.0;
 
