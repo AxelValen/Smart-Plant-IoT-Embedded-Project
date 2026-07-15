@@ -251,19 +251,47 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
       timestamp: { $gte: windowInfo.from }
     }).sort({ timestamp: 1 }).lean();
 
+    const absoluteLatestReading = await SensorReading.findOne({
+      user_id: req.user_id,
+      device_id: deviceID
+    }).sort({ timestamp: -1 }).lean();
+
     // Buscar eventos de riego en la ventana de tiempo seleccionada
     const wateringEvents = await WateringEvent.find({
       device_id: deviceID,
       timestamp: { $gte: windowInfo.from }
     }).sort({ timestamp: -1 }).lean(); 
 
-    // Validación segura para evitar que crashee si readings está vacío
-    const latestReading = readings && readings.length > 0 ? readings[readings.length - 1] : {};
+    // NUEVO: Buscar el último evento de riego de forma absoluta
+    const absoluteLatestWatering = await WateringEvent.findOne({
+      device_id: deviceID
+    }).sort({ timestamp: -1 }).lean();
+
+    // Si existe un evento de riego absoluto y la ventana actual no lo incluyó, lo agregamos
+    if (absoluteLatestWatering) {
+      const exists = wateringEvents.some(e => e._id.toString() === absoluteLatestWatering._id.toString());
+      if (!exists) {
+        absoluteLatestWatering.is_out_of_window = true; // Bandera para que el frontend sepa que es antiguo
+        wateringEvents.push(absoluteLatestWatering);
+      }
+    }
+
     const telemetry = readings && readings.length > 0
       ? construirTelemetria(readings)
       : crearTelemetriaVacia();
       
-    const health = evaluateHealth(plantType?.ideal || null, latestReading);
+    if (absoluteLatestReading) {
+      telemetry.latest = {
+        timestamp: absoluteLatestReading.timestamp,
+        humidity: absoluteLatestReading.humidity ?? 0,
+        temperature: absoluteLatestReading.temperature ?? 0,
+        nitrogeno: absoluteLatestReading.nitrogeno ?? 0,
+        fosforo: absoluteLatestReading.fosforo ?? 0,
+        potasio: absoluteLatestReading.potasio ?? 0
+      };
+    }
+
+    const health = evaluateHealth(plantType?.ideal || null, absoluteLatestReading || {});
 
     res.json({
       garden_plant: serializarGardenPlant(gardenPlant),
@@ -285,7 +313,7 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {
   username: process.env.MQTT_USERNAME,
   password: process.env.MQTT_PASSWORD,
-  clientId: "Backend_Server"
+  clientId: "Backend_Server_Local"
 });
 
 const devices = new Map();

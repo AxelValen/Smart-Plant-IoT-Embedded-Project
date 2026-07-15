@@ -659,8 +659,12 @@ function renderizarMonitor(data) {
   // Mostrar la última fecha de actualización sin importar si está asignado o es historial archivado
   const lastUpdateElem = document.getElementById('monitorLastUpdate');
   if (lastUpdateElem) {
-    if (telemetry.timestamps && telemetry.timestamps.length > 0) {
-      const lastTime = new Date(telemetry.timestamps[telemetry.timestamps.length - 1]);
+    // NUEVO: Utiliza el timestamp de telemetry.latest si existe
+    const realLastTimestamp = telemetry.latest?.timestamp || 
+      (telemetry.timestamps && telemetry.timestamps.length > 0 ? telemetry.timestamps[telemetry.timestamps.length - 1] : null);
+
+    if (realLastTimestamp) {
+      const lastTime = new Date(realLastTimestamp);
       const timeStr = lastTime.toLocaleString('es-ES', {
         day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
       });
@@ -713,11 +717,12 @@ function crearTelemetriaVacia() {
 }
 
 function convertirTelemetriaAEstado(telemetry, ideal) {
-  const humedad = ultimoValor(telemetry.humidity);
-  const temperature = ultimoValor(telemetry.temperature);
-  const nitrogeno = ultimoValor(telemetry.nitrogeno);
-  const fosforo = ultimoValor(telemetry.fosforo);
-  const potasio = ultimoValor(telemetry.potasio);
+  // NUEVO: Se busca primero el valor absoluto en 'latest', y si no hay, hace fallback a los arreglos
+  const humedad = telemetry.latest?.humidity ?? ultimoValor(telemetry.humidity);
+  const temperature = telemetry.latest?.temperature ?? ultimoValor(telemetry.temperature);
+  const nitrogeno = telemetry.latest?.nitrogeno ?? ultimoValor(telemetry.nitrogeno);
+  const fosforo = telemetry.latest?.fosforo ?? ultimoValor(telemetry.fosforo);
+  const potasio = telemetry.latest?.potasio ?? ultimoValor(telemetry.potasio);
 
   return {
     metrics: {
@@ -1294,8 +1299,10 @@ function renderizarTablaRiego(events) {
   const tbody = document.getElementById('wateringHistoryBody');
   if (!tbody) return;
 
+  // Si no hay eventos, ahora significa que NUNCA se ha regado la planta, porque el backend
+  // siempre manda el último evento histórico disponible.
   if (!Array.isArray(events) || events.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="watering-empty">No hay eventos en esta ventana de tiempo.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="watering-empty">Aún no hay registros de riego.</td></tr>';
     return;
   }
 
@@ -1311,10 +1318,15 @@ function renderizarTablaRiego(events) {
     
     // Si todavía no hay duración porque no ha terminado, mostramos "En curso..."
     const durationText = event.duration_sec ? `${event.duration_sec}s` : 'En curso...';
+    
+    // NUEVO: Indicador visual si el evento es traído de fuera de la ventana de tiempo seleccionada
+    const outOfWindowNote = event.is_out_of_window 
+      ? '<br><span style="font-size: 0.75em; color: var(--muted);">(Último registro histórico)</span>' 
+      : '';
 
     return `
       <tr>
-        <td>${dateStr}</td>
+        <td>${dateStr}${outOfWindowNote}</td>
         <td class="${typeClass}">${typeText}</td>
         <td>${durationText}</td>
       </tr>
