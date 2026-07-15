@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <title>Add Plant — Smart-Plant</title>
+  <link rel="icon" type="image/png" href="icons/smart-plant-icon.png">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -37,7 +38,7 @@
   <header class="page-header">
     <p class="page-header-eyebrow">Virtual Garden · Catálogo</p>
     <h1>Elige una planta</h1>
-    <p>Selecciona una categoría. Cada clic añade una nueva copia de la planta a tu jardín virtual.</p>
+    <p>Selecciona una categoría. Cada click añade una nueva copia de la planta a tu jardín virtual.</p>
   </header>
 
   <main>
@@ -243,7 +244,7 @@
               data-plant-name="Monstera"
               data-plant-type="Ornamental de follaje"
               data-model="models/monstera.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/monstera.glb"
                 alt="Modelo 3D de una Monstera"
@@ -269,7 +270,7 @@
               data-plant-name="Pothos"
               data-plant-type="Ornamental de follaje"
               data-model="models/pothos.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/pothos.glb"
                 alt="Modelo 3D de un Pothos"
@@ -295,7 +296,7 @@
               data-plant-name="Begonia Rex"
               data-plant-type="Ornamental de follaje"
               data-model="models/begonia_rex.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/begonia_rex.glb"
                 alt="Modelo 3D de una Begonia Rex"
@@ -321,7 +322,7 @@
               data-plant-name="Helecho"
               data-plant-type="Ornamental de follaje"
               data-model="models/fern.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/helecho.glb"
                 alt="Modelo 3D de un helecho"
@@ -347,7 +348,7 @@
               data-plant-name="Sansevieria"
               data-plant-type="Ornamental de follaje"
               data-model="models/sansevieria.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/sansevieria.glb"
                 alt="Modelo 3D de una Sansevieria"
@@ -406,7 +407,7 @@
               data-plant-name="Orquídea"
               data-plant-type="Ornamental floral"
               data-model="models/orchids.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/orchids.glb"
                 alt="Modelo 3D de una orquídea"
@@ -432,7 +433,7 @@
               data-plant-name="Rosa"
               data-plant-type="Ornamental floral"
               data-model="models/rose2.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/rose2.glb"
                 alt="Modelo 3D de una rosa"
@@ -458,7 +459,7 @@
               data-plant-name="Tulipán"
               data-plant-type="Ornamental floral"
               data-model="models/tulip.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/tulip.glb"
                 alt="Modelo 3D de un tulipán"
@@ -484,7 +485,7 @@
               data-plant-name="Geranio"
               data-plant-type="Ornamental floral"
               data-model="models/geranium.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/geranium.glb"
                 alt="Modelo 3D de un geranio"
@@ -500,33 +501,6 @@
                 <span class="plant-status">Click para añadir</span>
               </div>
             </article>
-
-            <article
-              class="catalog-item catalog-plant-card"
-              tabindex="0"
-              role="button"
-              data-add-plant="true"
-              data-plant-id="hortensia"
-              data-plant-name="Hortensia"
-              data-plant-type="Ornamental floral"
-              data-model="models/hydrangea.glb"
-              data-credit="Añade aquí el autor y la licencia">
-              <model-viewer
-                src="models/hydrangea.glb"
-                alt="Modelo 3D de una hortensia"
-                auto-rotate
-                auto-rotate-delay="0"
-                rotation-per-second="18deg"
-                shadow-intensity="1"
-                interaction-prompt="none">
-              </model-viewer>
-              <div class="catalog-card-info">
-                <span class="catalog-card-type">Arbusto floral</span>
-                <strong>Hortensia</strong>
-                <span class="plant-status">Click para añadir</span>
-              </div>
-            </article>
-          </div>
 
           <button
             class="catalog-arrow right"
@@ -569,7 +543,7 @@
               data-plant-name="Cactus"
               data-plant-type="Cactus"
               data-model="models/cactus.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/cactus.glb"
                 alt="Modelo 3D de un cactus"
@@ -591,11 +565,37 @@
               tabindex="0"
               role="button"
               data-add-plant="true"
+              data-plant-id="euphorbia-milii"
+              data-plant-name="Euphorbia milli"
+              data-plant-type="Semi suculenta"
+              data-model="models/mili.glb"
+              >
+              <model-viewer
+                src="models/mili.glb"
+                alt="Modelo 3D de una planta euphorbia mili"
+                auto-rotate
+                auto-rotate-delay="0"
+                rotation-per-second="18deg"
+                shadow-intensity="1"
+                interaction-prompt="none">
+              </model-viewer>
+              <div class="catalog-card-info">
+                <span class="catalog-card-type">Semi Suculenta</span>
+                <strong>Euphorbia milli</strong>
+                <span class="plant-status">Click para añadir</span>
+              </div>
+            </article>
+          
+            <article
+              class="catalog-item catalog-plant-card"
+              tabindex="0"
+              role="button"
+              data-add-plant="true"
               data-plant-id="cactus-barril"
               data-plant-name="Cactus barril"
               data-plant-type="Cactus"
               data-model="models/barrel_cactus.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/barrel_cactus.glb"
                 alt="Modelo 3D de un cactus barril"
@@ -621,7 +621,7 @@
               data-plant-name="Aloe vera"
               data-plant-type="Suculenta"
               data-model="models/aloe_vera1.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/aloe_vera1.glb"
                 alt="Modelo 3D de aloe vera"
@@ -645,37 +645,11 @@
               tabindex="0"
               role="button"
               data-add-plant="true"
-              data-plant-id="euphorbia milii"
-              data-plant-name="Euphorbia milii"
-              data-plant-type="Semi Suculenta"
-              data-model="models/mili.glb"
-              data-credit="Añade aquí el autor y la licencia">
-              <model-viewer
-                src="models/mili.glb"
-                alt="Modelo 3D de una Euphorbia milii"
-                auto-rotate
-                auto-rotate-delay="0"
-                rotation-per-second="18deg"
-                shadow-intensity="1"
-                interaction-prompt="none">
-              </model-viewer>
-              <div class="catalog-card-info">
-                <span class="catalog-card-type">Semi suculenta en roseta</span>
-                <strong>Euphorbia milii</strong>
-                <span class="plant-status">Click para añadir</span>
-              </div>
-            </article>
-
-            <article
-              class="catalog-item catalog-plant-card"
-              tabindex="0"
-              role="button"
-              data-add-plant="true"
               data-plant-id="planta-jade"
               data-plant-name="Planta jade"
               data-plant-type="Suculenta"
               data-model="models/jade_plant.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/jade_plant.glb"
                 alt="Modelo 3D de una planta jade"
@@ -734,7 +708,7 @@
               data-plant-name="Tomate"
               data-plant-type="Hortaliza de fruto"
               data-model="models/tomato_plant.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/tomato_plant.glb"
                 alt="Modelo 3D de una planta de tomate"
@@ -760,7 +734,7 @@
               data-plant-name="Batata"
               data-plant-type="Tubérculo"
               data-model="models/sweet_potato.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/sweet_potato.glb"
                 alt="Modelo 3D de una batata"
@@ -786,7 +760,7 @@
               data-plant-name="Cebolla"
               data-plant-type="Bulbo"
               data-model="models/onion.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/onion.glb"
                 alt="Modelo 3D de una cebolla"
@@ -814,7 +788,7 @@
               data-plant-name="Zanahoria"
               data-plant-type="Raíz comestible"
               data-model="models/carrot.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/carrot.glb"
                 alt="Modelo 3D de una zanahoria"
@@ -843,7 +817,7 @@
               data-plant-name="Lechuga"
               data-plant-type="Hortaliza de hoja"
               data-model="models/lettuce.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/lettuce.glb"
                 alt="Modelo 3D de una lechuga"
@@ -904,7 +878,7 @@
               data-plant-name="Durazno"
               data-plant-type="Frutal arbóreo"
               data-model="models/peach_pack.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/peach_pack.glb"
                 alt="Modelo 3D de una planta de durazno"
@@ -931,7 +905,7 @@
               data-plant-name="Blueberry"
               data-plant-type="Frutal arbóreo"
               data-model="models/blueberry.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/blueberry.glb"
                 alt="Modelo 3D de una planta de arándano"
@@ -959,7 +933,7 @@
               data-plant-name="Limón"
               data-plant-type="Frutal arbóreo"
               data-model="models/lemon_tree.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/lemon_tree.glb"
                 alt="Modelo 3D de una planta de limón"
@@ -985,7 +959,7 @@
               data-plant-name="Fresa"
               data-plant-type="Frutal herbáceo"
               data-model="models/strawberry.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/strawberry.glb"
                 alt="Modelo 3D de una planta de fresa"
@@ -1013,7 +987,7 @@
               data-plant-name="Mandarina"
               data-plant-type="Frutal trepador"
               data-model="models/mandarin.glb"
-              data-credit="Añade aquí el autor y la licencia">
+              >
               <model-viewer
                 src="models/mandarin.glb"
                 alt="Modelo 3D de una vid"

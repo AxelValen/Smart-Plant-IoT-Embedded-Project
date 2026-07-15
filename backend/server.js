@@ -184,7 +184,8 @@ app.delete('/api/garden/:gardenPlantId', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'La planta no existe' });
     }
 
-    if (gardenPlant.device_id) {
+    // Solo devolver a 'pending' si es un módulo real
+    if (gardenPlant.device_id && !gardenPlant.device_id.startsWith('archived_')) {
       await Device.findOneAndUpdate(
         { device_id: gardenPlant.device_id },
         { $set: { user_id: null, plant_type: null, status: 'pending', last_seen: new Date() } }
@@ -201,6 +202,11 @@ app.delete('/api/garden/:gardenPlantId', authMiddleware, async (req, res) => {
       });
 
       broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
+    }
+
+    if (gardenPlant.device_id && gardenPlant.device_id.startsWith('archived_')) {
+      await Device.deleteOne({ device_id: gardenPlant.device_id });
+      devices.delete(gardenPlant.device_id);
     }
 
     res.json({ garden_plant: serializarGardenPlant(gardenPlant) });
@@ -245,19 +251,47 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
       timestamp: { $gte: windowInfo.from }
     }).sort({ timestamp: 1 }).lean();
 
+    const absoluteLatestReading = await SensorReading.findOne({
+      user_id: req.user_id,
+      device_id: deviceID
+    }).sort({ timestamp: -1 }).lean();
+
     // Buscar eventos de riego en la ventana de tiempo seleccionada
     const wateringEvents = await WateringEvent.find({
       device_id: deviceID,
       timestamp: { $gte: windowInfo.from }
     }).sort({ timestamp: -1 }).lean(); 
 
-    // Validación segura para evitar que crashee si readings está vacío
-    const latestReading = readings && readings.length > 0 ? readings[readings.length - 1] : {};
+    // NUEVO: Buscar el último evento de riego de forma absoluta
+    const absoluteLatestWatering = await WateringEvent.findOne({
+      device_id: deviceID
+    }).sort({ timestamp: -1 }).lean();
+
+    // Si existe un evento de riego absoluto y la ventana actual no lo incluyó, lo agregamos
+    if (absoluteLatestWatering) {
+      const exists = wateringEvents.some(e => e._id.toString() === absoluteLatestWatering._id.toString());
+      if (!exists) {
+        absoluteLatestWatering.is_out_of_window = true; // Bandera para que el frontend sepa que es antiguo
+        wateringEvents.push(absoluteLatestWatering);
+      }
+    }
+
     const telemetry = readings && readings.length > 0
       ? construirTelemetria(readings)
       : crearTelemetriaVacia();
       
-    const health = evaluateHealth(plantType?.ideal || null, latestReading);
+    if (absoluteLatestReading) {
+      telemetry.latest = {
+        timestamp: absoluteLatestReading.timestamp,
+        humidity: absoluteLatestReading.humidity ?? 0,
+        temperature: absoluteLatestReading.temperature ?? 0,
+        nitrogeno: absoluteLatestReading.nitrogeno ?? 0,
+        fosforo: absoluteLatestReading.fosforo ?? 0,
+        potasio: absoluteLatestReading.potasio ?? 0
+      };
+    }
+
+    const health = evaluateHealth(plantType?.ideal || null, absoluteLatestReading || {});
 
     res.json({
       garden_plant: serializarGardenPlant(gardenPlant),
@@ -279,7 +313,7 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {
   username: process.env.MQTT_USERNAME,
   password: process.env.MQTT_PASSWORD,
-  clientId: "Backend_Server"
+  clientId: "Backend_Server_Local"
 });
 
 const devices = new Map();
@@ -332,16 +366,26 @@ wss.on('connection', (ws) => {
         }
 
         const plantInfo = selectedPlant.plant_type_id;
+        const oldDeviceId = selectedPlant.device_id; // Capturamos el ID anterior (puede ser null o archived_)
 
+        // 1. Desasignar cualquier otra planta que tuviera este módulo físico
         await GardenPlant.updateMany(
           { user_id: userID, device_id: deviceID, _id: { $ne: selectedPlant._id } },
           { $set: { device_id: null } }
         );
 
+        // 2. Si la planta que estamos asignando tenía un historial archivado, rescatarlo
+        if (oldDeviceId && oldDeviceId.startsWith('archived_')) {
+          await SensorReading.updateMany({ device_id: oldDeviceId, user_id: userID }, { $set: { device_id: deviceID } });
+          await WateringEvent.updateMany({ device_id: oldDeviceId }, { $set: { device_id: deviceID } });
+        }
+
+        // 3. Asignar el nuevo módulo a la planta
         await GardenPlant.findByIdAndUpdate(selectedPlant._id, {
           device_id: deviceID
         });
 
+        // 4. Actualizar el estado del módulo en DB
         await Device.findOneAndUpdate(
           { device_id: deviceID },
           {
@@ -353,6 +397,7 @@ wss.on('connection', (ws) => {
           { upsert: true, new: true, setDefaultsOnInsert: true }
         );
 
+        // 5. Actualizar en memoria RAM
         devices.set(deviceID, {
           user_id: userID,
           plant_type: plantInfo?.name || null,
@@ -364,10 +409,60 @@ wss.on('connection', (ws) => {
         });
 
         console.log(`✅ Dispositivo ${deviceID} asignado a: ${plantInfo?.display_name || plantInfo?.name || 'planta'}`);
+        if (oldDeviceId && oldDeviceId.startsWith('archived_')) {
+            console.log(`♻️ Historial rescatado desde ${oldDeviceId} hacia ${deviceID}`);
+        }
         
         // Notifica a todos los clientes que la lista de dispositivos cambió
         broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
-        return; // Termina la ejecución para no caer en la lógica de los LEDs
+        return; 
+      }
+
+      // --- NUEVA LÓGICA DE DESASIGNACIÓN ---
+      if (cmd === 'UNASSIGN_PLANT') {
+        const selectedGardenPlantId = data.garden_plant_id;
+        const deviceID = data.device_id;
+
+        if (!deviceID || !userID || !selectedGardenPlantId) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Datos incompletos para desasignar' }));
+          return;
+        }
+
+        // Crear un ID de archivo virtual para mantener el historial intacto
+        const archivedId = `archived_${deviceID}_${Date.now()}`;
+
+        // 1. Reasignar el historial a este ID archivado
+        await SensorReading.updateMany({ device_id: deviceID, user_id: userID }, { $set: { device_id: archivedId } });
+        await WateringEvent.updateMany({ device_id: deviceID }, { $set: { device_id: archivedId } });
+
+        // 2. Actualizar la planta con el ID archivado
+        await GardenPlant.findByIdAndUpdate(selectedGardenPlantId, { $set: { device_id: archivedId } });
+
+        // 3. Liberar el módulo físico manteniendo su estado de conexión real
+        const currentDevice = devices.get(deviceID);
+        const nextStatus = (currentDevice && currentDevice.status === 'offline') ? 'offline' : 'pending';
+
+        await Device.findOneAndUpdate(
+          { device_id: deviceID },
+          { $set: { user_id: null, plant_type: null, status: nextStatus, last_seen: new Date() } }
+        );
+
+        // 4. Actualizar estado en memoria
+        devices.set(deviceID, {
+          user_id: null,
+          plant_type: null,
+          ideal: null,
+          status: nextStatus,
+          lastReading: null,
+          last_seen: Date.now(),
+          garden_plant_id: null
+        });
+
+        console.log(`✅ Dispositivo ${deviceID} desasignado. Historial preservado en ${archivedId}`);
+        
+        // Notificamos para que se actualice la vista
+        broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
+        return;
       }
   
       if (cmd === 'LED_ON') {
@@ -435,35 +530,43 @@ mqttClient.on('message', async (topic, message) => {
     const deviceID = topic.split('/')[2];
     const statusPayload = messageStr; // "online" u "offline"
     
-    // Obtenemos el dispositivo del caché si existe
-    const device = devices.get(deviceID) || {}; 
-    
-    // Actualizamos el caché en memoria
-    device.status = statusPayload;
-    if (!devices.has(deviceID)) {
-        devices.set(deviceID, device);
-    }
-    
     if (statusPayload === 'offline') {
+      const device = devices.get(deviceID) || {};
+      device.status = 'offline';
+      devices.set(deviceID, device);
+      
       console.log(`🔌 Módulo ${deviceID} desconectado (LWT / Timeout Broker)`);
-      
       if (wateringStart.has(deviceID)) {
-          mqttClient.publish(`control/led/${deviceID}`, 'LED_OFF');
-          wateringStart.delete(deviceID);
-          broadcastToClients({ type: 'watering_stopped', device_id: deviceID, reason: 'timeout' });
-          console.log(`❌ Riego de emergencia detenido para ${deviceID} por desconexión`);
+        mqttClient.publish(`control/led/${deviceID}`, 'LED_OFF');
+        wateringStart.delete(deviceID);
+        broadcastToClients({ type: 'watering_stopped', device_id: deviceID, reason: 'timeout' });
+        console.log(`❌ Riego de emergencia detenido para ${deviceID} por desconexión`);
       }
-    } else {
-      console.log(`✅ Módulo ${deviceID} conectado (Online)`);
-    }
-    
-    broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
-    
-    Device.findOneAndUpdate({ device_id: deviceID }, { status: statusPayload })
-      .then(() => console.log(`💾 Estado de ${deviceID} actualizado a ${statusPayload} en DB`))
-      .catch(err => console.error('Error actualizando DB:', err.message));
+      broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
       
-    return; // Salir de la función aquí, NO intentar parsear como JSON
+      Device.findOneAndUpdate({ device_id: deviceID }, { status: 'offline' })
+        .catch(err => console.error('Error actualizando DB:', err.message));
+    } else {
+      // Validamos en DB si el módulo está asignado
+      Device.findOne({ device_id: deviceID }).then(existing => {
+        let finalStatus = 'online';
+        // Si no existe o no tiene dueño asignado, forzamos a que sea pending
+        if (!existing || !existing.user_id) {
+          finalStatus = 'pending';
+        }
+        
+        const device = devices.get(deviceID) || {};
+        device.status = finalStatus;
+        devices.set(deviceID, device);
+        
+        console.log(`✅ Módulo ${deviceID} conectado (${finalStatus})`);
+        broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
+        
+        Device.findOneAndUpdate({ device_id: deviceID }, { status: finalStatus }, { upsert: true, setDefaultsOnInsert: true })
+          .catch(err => console.error('Error actualizando DB:', err.message));
+      });
+    }
+    return; 
   }
 
 
@@ -737,7 +840,9 @@ async function stopWatering(deviceID, device, reading, healthResult) {
 function getDevicesSnapshot() {
   const snapshot = {};
   devices.forEach((info, id) => {
-    snapshot[id] = { device_id: id, ...info };
+    if (!id.startsWith('archived_')) {
+      snapshot[id] = { device_id: id, ...info };
+    }
   });
   return snapshot;
 }
@@ -786,94 +891,7 @@ function inferIdealForCatalog(catalogLabel) {
     potasio: { min: 35, max: 120 }
   };
 
-  const catalogPresets = {
-    cactus: {
-      humidity: { min: 10, max: 35 },
-      temperature: { min: 18, max: 35 },
-      nitrogeno: { min: 20, max: 90 },
-      fosforo: { min: 20, max: 90 },
-      potasio: { min: 20, max: 90 }
-    },
-    suculenta: {
-      humidity: { min: 15, max: 45 },
-      temperature: { min: 18, max: 32 },
-      nitrogeno: { min: 20, max: 90 },
-      fosforo: { min: 20, max: 90 },
-      potasio: { min: 20, max: 90 }
-    },
-    semi_suculenta: {
-      humidity: { min: 20, max: 50 },
-      temperature: { min: 18, max: 32 },
-      nitrogeno: { min: 20, max: 90 },
-      fosforo: { min: 20, max: 90 },
-      potasio: { min: 20, max: 90 }
-    },
-    ornamental_de_follaje: {
-      humidity: { min: 45, max: 75 },
-      temperature: { min: 18, max: 28 },
-      nitrogeno: { min: 35, max: 110 },
-      fosforo: { min: 35, max: 110 },
-      potasio: { min: 35, max: 110 }
-    },
-    ornamental_floral: {
-      humidity: { min: 45, max: 75 },
-      temperature: { min: 16, max: 28 },
-      nitrogeno: { min: 35, max: 110 },
-      fosforo: { min: 35, max: 110 },
-      potasio: { min: 35, max: 110 }
-    },
-    hortaliza_de_fruto: {
-      humidity: { min: 55, max: 80 },
-      temperature: { min: 18, max: 28 },
-      nitrogeno: { min: 45, max: 120 },
-      fosforo: { min: 45, max: 120 },
-      potasio: { min: 45, max: 120 }
-    },
-    hortaliza_de_hoja: {
-      humidity: { min: 65, max: 90 },
-      temperature: { min: 15, max: 24 },
-      nitrogeno: { min: 45, max: 120 },
-      fosforo: { min: 45, max: 120 },
-      potasio: { min: 45, max: 120 }
-    },
-    bulbo: {
-      humidity: { min: 45, max: 70 },
-      temperature: { min: 12, max: 24 },
-      nitrogeno: { min: 35, max: 100 },
-      fosforo: { min: 35, max: 100 },
-      potasio: { min: 35, max: 100 }
-    },
-    raiz_comestible: {
-      humidity: { min: 55, max: 80 },
-      temperature: { min: 14, max: 24 },
-      nitrogeno: { min: 35, max: 110 },
-      fosforo: { min: 35, max: 110 },
-      potasio: { min: 35, max: 110 }
-    },
-    frutal_arboreo: {
-      humidity: { min: 50, max: 80 },
-      temperature: { min: 18, max: 30 },
-      nitrogeno: { min: 40, max: 120 },
-      fosforo: { min: 40, max: 120 },
-      potasio: { min: 40, max: 120 }
-    },
-    frutal_herbaceo: {
-      humidity: { min: 60, max: 85 },
-      temperature: { min: 15, max: 28 },
-      nitrogeno: { min: 40, max: 120 },
-      fosforo: { min: 40, max: 120 },
-      potasio: { min: 40, max: 120 }
-    },
-    frutal_trepador: {
-      humidity: { min: 55, max: 80 },
-      temperature: { min: 18, max: 30 },
-      nitrogeno: { min: 40, max: 120 },
-      fosforo: { min: 40, max: 120 },
-      potasio: { min: 40, max: 120 }
-    }
-  };
-
-  return catalogPresets[normalized] || defaults;
+  return defaults;
 }
 
 function obtenerVentanaDeHistorial(windowParam) {
@@ -953,35 +971,6 @@ function broadcastToClients(data) {
 }
 
 mqttClient.on('error', (err) => console.error('❌ Error MQTT:', err));
-
-// ── Detección de módulos desconectados ────────────────
-setInterval(() => {
-  const now = Date.now();
-  let changed = false;
-  
-  devices.forEach((device, deviceID) => {
-    // Si han pasado más de 5 segundos sin telemetría, se declara offline
-    if (device.status !== 'offline' && device.last_seen && (now - device.last_seen > 5000)) {
-      device.status = 'offline';
-      changed = true;
-      console.log(`🔌 Módulo ${deviceID} desconectado (Timeout)`);
-      
-      // Detiene el riego en la base de datos si se desconectó regando
-      if (wateringStart.has(deviceID)) {
-          mqttClient.publish(`control/led/${deviceID}`, 'LED_OFF');
-          wateringStart.delete(deviceID);
-          broadcastToClients({ type: 'watering_stopped', device_id: deviceID, reason: 'timeout' });
-      }
-      
-      Device.findOneAndUpdate({ device_id: deviceID }, { status: 'offline' })
-        .catch(err => console.error('Error al actualizar BD:', err.message));
-    }
-  });
-  
-  if (changed) {
-    broadcastToClients({ type: 'device_update', devices: getDevicesSnapshot() });
-  }
-}, 5000);
 
 const PORT = process.env.PORT || 3000;
 

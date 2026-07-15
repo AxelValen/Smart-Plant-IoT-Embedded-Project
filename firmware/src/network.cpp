@@ -81,9 +81,9 @@ void connectMQTT() {
 }
 
 void setupNetwork() {
-  WiFi.mode(WIFI_STA); 
-  WiFi.disconnect(true); 
-  delay(100); 
+  WiFi.mode(WIFI_STA); // Forzar el modo estación 
+  WiFi.disconnect(true); // Desconectar y borrar cualquier configuración previa en caché
+  delay(500); // Darle un momento al radio WiFi para estabilizarse antes de iniciar
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.print("Conectando a WiFi");
@@ -126,9 +126,9 @@ void loopNetwork() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("⚠️ WiFi desconectado. Intentando reconectar...");
     digitalWrite(PIN_LED_INDICATOR, LOW);
-    WiFi.disconnect();
-    setupNetwork();
-    return;
+    
+    delay(1000); 
+    ESP.restart();
   }
   if (!mqtt.connected()) connectMQTT();
   mqtt.loop(); 

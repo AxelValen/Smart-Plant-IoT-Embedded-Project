@@ -34,6 +34,32 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  const currentPage = window.location.pathname.split('/').pop() || 'home.html';
+  document.querySelectorAll('.nav-links a').forEach(link => {
+    // Obtenemos el atributo href real (ej: "home.html")
+    const linkHref = link.getAttribute('href');
+    
+    // Si el href coincide con la página actual, le añadimos la clase 'activo'
+    if (linkHref === currentPage) {
+      link.classList.add('activo');
+    } else {
+      link.classList.remove('activo'); // Limpiamos por si acaso
+    }
+  });
+
+  apiFetch('/api/auth/me')
+    .then(data => {
+      if (data && data.user && data.user.name) {
+        // Busca el enlace que apunta a cuenta.html dentro de la navegación
+        const cuentaLink = document.querySelector('.nav-links a[href="cuenta.html"]');
+        if (cuentaLink) {
+          // Extrae solo el primer nombre y le concatena el emoji
+          cuentaLink.textContent = '👤 ' + data.user.name.split(' ')[0];
+        }
+      }
+    })
+    .catch(err => console.error('Error al cargar nombre para el menú:', err));
+
   cargarJardin();
 
   inicializarCarruselPrincipal();
@@ -372,12 +398,29 @@ function inicializarJardinVirtual() {
 
   const dialogo = document.getElementById('plantActionsDialog');
   const eliminar = document.getElementById('deletePlantAction');
+  const desasignar = document.getElementById('unassignPlantAction');
+
+  desasignar?.addEventListener('click', () => {
+    if (!currentMonitorPlant || !currentMonitorPlant.device_id) return;
+
+    const deviceId = currentMonitorPlant.device_id;
+    const plantId = currentMonitorPlant._id;
+
+    enviarComandoWS('UNASSIGN_PLANT', {
+      device_id: deviceId,
+      garden_plant_id: plantId
+    });
+
+    // Refrescar el jardín localmente en breve para cargar el ID archivado
+    setTimeout(cargarJardin, 500);
+
+    if (dialogo?.open) dialogo.close();
+    mostrarToast('Módulo desasignado. La planta conserva su historial.');
+  });
 
   eliminar?.addEventListener('click', async () => {
     if (!currentMonitorPlant) return;
     try {
-      // Borrar la planta del caché local  
-      // para evitar que el evento WebSocket la atrape en la lista disponible.
       const idEliminar = currentMonitorPlant._id;
       gardenCache = gardenCache.filter(p => p._id !== idEliminar);
 
@@ -389,7 +432,6 @@ function inicializarJardinVirtual() {
     } catch (error) {
       console.error('Error al eliminar planta:', error);
       mostrarToast('No se pudo eliminar la planta.');
-      // Revertir en caso de fallo
       cargarJardin();
     }
   });
@@ -451,9 +493,19 @@ function renderizarJardinDesdeCache() {
     const nombre = document.createElement('strong');
     nombre.textContent = obtenerNombreDePlanta(planta);
 
+    // Identificar si el dispositivo es un historial archivado para el texto de la tarjeta
+    const isArchived = planta.device_id && planta.device_id.startsWith('archived_');
     const hint = document.createElement('span');
     hint.className = 'garden-plant-hint';
-    hint.textContent = planta.device_id ? `Asignada a ${planta.device_id}` : 'Sin dispositivo asignado';
+    
+    // NUEVA LÓGICA: Separamos los 3 casos posibles
+    if (planta.device_id && !isArchived) {
+      hint.textContent = `Asignada a ${planta.device_id}`;
+    } else if (isArchived) {
+      hint.textContent = 'Historial archivado';
+    } else {
+      hint.textContent = 'Sin dispositivo asignado';
+    }
 
     info.append(tipo, nombre, hint);
     tarjeta.append(modelo, info);
@@ -480,11 +532,17 @@ function abrirDialogoDePlanta(planta) {
   const nombre = document.getElementById('actionPlantName');
   const tipo = document.getElementById('actionPlantType');
   const monitor = document.getElementById('viewMonitorAction');
+  const desasignar = document.getElementById('unassignPlantAction');
 
   currentMonitorPlant = planta;
   if (nombre) nombre.textContent = obtenerNombreDePlanta(planta);
   if (tipo) tipo.textContent = planta.plant_type_id?.display_name || planta.plant_type_id?.name || '';
   if (monitor) monitor.href = `monitor.html?plant=${encodeURIComponent(planta._id)}&window=24h`;
+  
+  if (desasignar) {
+    desasignar.style.display = (planta.device_id && !planta.device_id.startsWith('archived_')) ? 'block' : 'none';
+  }
+  
   if (dialogo?.showModal) dialogo.showModal();
 }
 
@@ -578,20 +636,43 @@ function renderizarMonitor(data) {
   const deviceStatus = data.device_status || (deviceId ? (deviceSnapshot[deviceId]?.status || 'offline') : 'unassigned');
   const isWatering = data.isWatering ?? currentMonitorData?.isWatering ?? false;
 
+  // Filtrar visualmente si el ID es un archivo histórico
+  const isArchived = deviceId && deviceId.startsWith('archived_');
+  const displayDeviceId = isArchived ? null : deviceId;
+
   document.getElementById('monitorPlantOverview')?.removeAttribute('hidden');
   document.getElementById('monitorContent')?.removeAttribute('hidden');
   document.getElementById('monitorNotFound')?.setAttribute('hidden', '');
   document.getElementById('monitorHeaderTitle').textContent = obtenerNombreDePlanta(gardenPlant);
-  document.getElementById('monitorHeaderSubtitle').textContent = deviceId
+  document.getElementById('monitorHeaderSubtitle').textContent = displayDeviceId
     ? `Datos exclusivos del módulo asignado a ${obtenerNombreDePlanta(gardenPlant)}.`
     : 'La planta todavía no tiene un dispositivo asignado.';
   document.getElementById('monitorPlantName').textContent = obtenerNombreDePlanta(gardenPlant);
   document.getElementById('monitorPlantType').textContent = plantType.display_name || plantType.name || 'Tipo de planta';
-  document.getElementById('monitorPlantInstance').textContent = deviceId || 'sin asignar';
+  document.getElementById('monitorPlantInstance').textContent = displayDeviceId || 'sin asignar';
 
   const moduleStatus = document.getElementById('monitorModuleStatus');
   if (moduleStatus) {
-    moduleStatus.textContent = deviceId ? 'Módulo asignado' : 'Sin módulo asignado';
+    moduleStatus.textContent = displayDeviceId ? 'Módulo asignado' : 'Sin módulo asignado';
+  }
+
+  // Mostrar la última fecha de actualización sin importar si está asignado o es historial archivado
+  const lastUpdateElem = document.getElementById('monitorLastUpdate');
+  if (lastUpdateElem) {
+    // NUEVO: Utiliza el timestamp de telemetry.latest si existe
+    const realLastTimestamp = telemetry.latest?.timestamp || 
+      (telemetry.timestamps && telemetry.timestamps.length > 0 ? telemetry.timestamps[telemetry.timestamps.length - 1] : null);
+
+    if (realLastTimestamp) {
+      const lastTime = new Date(realLastTimestamp);
+      const timeStr = lastTime.toLocaleString('es-ES', {
+        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+      });
+      lastUpdateElem.textContent = `Última actualización: ${timeStr}`;
+      lastUpdateElem.style.display = 'block';
+    } else {
+      lastUpdateElem.style.display = 'none';
+    }
   }
 
   const modelo = document.getElementById('monitorPlantModel');
@@ -615,9 +696,9 @@ function renderizarMonitor(data) {
   actualizarGraficaAbierta();
 
   renderizarRecomendaciones(plantType.ideal, health);
-  actualizarBotonRiego(state, plantType.ideal, deviceId, deviceStatus);
-  renderizarTablaRiego(data.watering_events); // <-- Llamada para actualizar la tabla
-  actualizarEstadoConexionMonitor(deviceStatus, deviceId);
+  actualizarBotonRiego(state, plantType.ideal, displayDeviceId, deviceStatus);
+  renderizarTablaRiego(data.watering_events);
+  actualizarEstadoConexionMonitor(deviceStatus, displayDeviceId);
 
   if (gardenPlant?.device_id) {
     currentMonitorPlant.device_id = gardenPlant.device_id;
@@ -636,11 +717,12 @@ function crearTelemetriaVacia() {
 }
 
 function convertirTelemetriaAEstado(telemetry, ideal) {
-  const humedad = ultimoValor(telemetry.humidity);
-  const temperature = ultimoValor(telemetry.temperature);
-  const nitrogeno = ultimoValor(telemetry.nitrogeno);
-  const fosforo = ultimoValor(telemetry.fosforo);
-  const potasio = ultimoValor(telemetry.potasio);
+  // NUEVO: Se busca primero el valor absoluto en 'latest', y si no hay, hace fallback a los arreglos
+  const humedad = telemetry.latest?.humidity ?? ultimoValor(telemetry.humidity);
+  const temperature = telemetry.latest?.temperature ?? ultimoValor(telemetry.temperature);
+  const nitrogeno = telemetry.latest?.nitrogeno ?? ultimoValor(telemetry.nitrogeno);
+  const fosforo = telemetry.latest?.fosforo ?? ultimoValor(telemetry.fosforo);
+  const potasio = telemetry.latest?.potasio ?? ultimoValor(telemetry.potasio);
 
   return {
     metrics: {
@@ -979,7 +1061,7 @@ function actualizarEstadoMonitorDesdeDispositivos() {
   }
 
   if (currentMonitorData?.state) {
-    currentMonitorData.state.isWatering = Boolean(device.status === 'online' && device.lastReading && device.lastReading.humidity < (currentMonitorData.garden_plant?.plant_type_id?.ideal?.humidity?.min || 0));
+    currentMonitorData.state.isWatering = Boolean(currentMonitorData.isWatering);
   }
 
   currentMonitorData.device_status = device.status;
@@ -987,9 +1069,9 @@ function actualizarEstadoMonitorDesdeDispositivos() {
 }
 
 function manejarDispositivosPendientes() {
-  // CAMBIO: Ordenar explícitamente por last_seen (el más antiguo primero)
+  // Ignorar explícitamente cualquier ID que empiece por 'archived_'
   const pendientes = Object.values(deviceSnapshot)
-    .filter((device) => device.status === 'pending' && !sessionStorage.getItem(`ignored_device_${device.device_id}`))
+    .filter((device) => device.status === 'pending' && !device.device_id.startsWith('archived_') && !sessionStorage.getItem(`ignored_device_${device.device_id}`))
     .sort((a, b) => (a.last_seen || 0) - (b.last_seen || 0));
 
   if (pendientes.length === 0) {
@@ -999,9 +1081,7 @@ function manejarDispositivosPendientes() {
     return;
   }
 
-  // Si el modal ya está abierto con un módulo válido, no lo sobrescribimos
   if (pendingAssignmentShown && pendingDeviceId && pendientes.some((device) => device.device_id === pendingDeviceId)) {
-    // Actualizamos la lista internamente por si el caché de plantas cambió 
     renderizarListaDeAsignacion(pendingDeviceId);
     return;
   }
@@ -1021,33 +1101,6 @@ function abrirDialogoAsignacion(deviceId) {
   if (titulo) titulo.textContent = `Asignar planta a ${deviceId}`;
   renderizarListaDeAsignacion(deviceId);
   if (dialogo.showModal && !dialogo.open) dialogo.showModal();
-
-  if (lista) {
-    lista.replaceChildren();
-
-    if (gardenCache.length === 0) {
-      const empty = document.createElement('p');
-      empty.textContent = 'Agrega plantas a tu jardín para asignarlas al módulo.';
-      lista.appendChild(empty);
-
-      const abrirCatalogo = document.createElement('a');
-      abrirCatalogo.className = 'dialog-action dialog-action-primary';
-      abrirCatalogo.href = 'addplant.html';
-      abrirCatalogo.textContent = 'Agregar plantas';
-      lista.appendChild(abrirCatalogo);
-    } else {
-      gardenCache.forEach((planta) => {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'dialog-action dialog-action-primary';
-        button.textContent = obtenerNombreDePlanta(planta);
-        button.addEventListener('click', () => asignarPlantaADevice(deviceId, planta._id));
-        lista.appendChild(button);
-      });
-    }
-  }
-
-  if (dialogo.showModal && !dialogo.open) dialogo.showModal();
 }
 
 function renderizarListaDeAsignacion(deviceId) {
@@ -1059,8 +1112,8 @@ function renderizarListaDeAsignacion(deviceId) {
   
   lista.replaceChildren();
 
-  // CAMBIO: Filtrar el caché para mostrar SOLO las plantas que no tienen un módulo asignado
-  const plantasDisponibles = gardenCache.filter(planta => !planta.device_id);
+  // NUEVO: Mostrar plantas sin módulo O plantas con historial archivado
+  const plantasDisponibles = gardenCache.filter(planta => !planta.device_id || planta.device_id.startsWith('archived_'));
 
   if (plantasDisponibles.length === 0) {
     const empty = document.createElement('p');
@@ -1074,10 +1127,16 @@ function renderizarListaDeAsignacion(deviceId) {
     lista.appendChild(abrirCatalogo);
   } else {
     plantasDisponibles.forEach((planta) => {
+      const isArchived = planta.device_id && planta.device_id.startsWith('archived_');
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'dialog-action dialog-action-primary';
-      button.textContent = obtenerNombreDePlanta(planta);
+      
+      // Añadir un indicador visual en el botón si la planta tiene historial rescatable
+      button.textContent = isArchived 
+        ? `${obtenerNombreDePlanta(planta)} (Retomar historial)` 
+        : obtenerNombreDePlanta(planta);
+        
       button.addEventListener('click', () => asignarPlantaADevice(deviceId, planta._id));
       lista.appendChild(button);
     });
@@ -1240,8 +1299,10 @@ function renderizarTablaRiego(events) {
   const tbody = document.getElementById('wateringHistoryBody');
   if (!tbody) return;
 
+  // Si no hay eventos, ahora significa que NUNCA se ha regado la planta, porque el backend
+  // siempre manda el último evento histórico disponible.
   if (!Array.isArray(events) || events.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="watering-empty">No hay eventos en esta ventana de tiempo.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="watering-empty">Aún no hay registros de riego.</td></tr>';
     return;
   }
 
@@ -1257,10 +1318,15 @@ function renderizarTablaRiego(events) {
     
     // Si todavía no hay duración porque no ha terminado, mostramos "En curso..."
     const durationText = event.duration_sec ? `${event.duration_sec}s` : 'En curso...';
+    
+    // NUEVO: Indicador visual si el evento es traído de fuera de la ventana de tiempo seleccionada
+    const outOfWindowNote = event.is_out_of_window 
+      ? '<br><span style="font-size: 0.75em; color: var(--muted);">(Último registro histórico)</span>' 
+      : '';
 
     return `
       <tr>
-        <td>${dateStr}</td>
+        <td>${dateStr}${outOfWindowNote}</td>
         <td class="${typeClass}">${typeText}</td>
         <td>${durationText}</td>
       </tr>
