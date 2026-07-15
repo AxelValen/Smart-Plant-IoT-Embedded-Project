@@ -313,7 +313,7 @@ app.get('/api/monitor/:instance_id', authMiddleware, async (req, res) => {
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER_URL, {
   username: process.env.MQTT_USERNAME,
   password: process.env.MQTT_PASSWORD,
-  clientId: "Backend_Server_Local"
+  clientId: "Backend_Server"
 });
 
 const devices = new Map();
