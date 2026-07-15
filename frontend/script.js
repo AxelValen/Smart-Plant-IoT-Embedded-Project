@@ -1056,7 +1056,7 @@ function actualizarEstadoMonitorDesdeDispositivos() {
   }
 
   if (currentMonitorData?.state) {
-    currentMonitorData.state.isWatering = Boolean(device.status === 'online' && device.lastReading && device.lastReading.humidity < (currentMonitorData.garden_plant?.plant_type_id?.ideal?.humidity?.min || 0));
+    currentMonitorData.state.isWatering = Boolean(currentMonitorData.isWatering);
   }
 
   currentMonitorData.device_status = device.status;
